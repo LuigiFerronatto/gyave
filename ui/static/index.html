@@ -72,12 +72,13 @@
 
       <!-- Collapsible chat history — hidden by default, opened via the
            FAB's hover menu ("Ver histórico"). -->
+      <!-- Backdrop: clicking outside the panel closes it, same as the
+           historyCloseBtn / re-toggle. -->
+      <div id="historyBackdrop" class="history-backdrop hidden"></div>
       <aside id="historyPanel" class="history-panel hidden">
         <div class="history-header">
           <span>Histórico da conversa</span>
-          <button id="historyCloseBtn" class="icon-btn small" title="Fechar histórico">
-            <i class="icon" data-icon="volume-x"></i>
-          </button>
+          <button id="historyCloseBtn" class="icon-btn small close-x" title="Fechar histórico">&times;</button>
         </div>
         <div class="log" id="log"></div>
       </aside>

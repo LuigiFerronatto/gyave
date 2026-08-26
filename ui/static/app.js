@@ -18,6 +18,7 @@ const volumeVal = document.getElementById("volumeVal");
 const historyPanel = document.getElementById("historyPanel");
 const historyToggleBtn = document.getElementById("historyToggleBtn");
 const historyCloseBtn = document.getElementById("historyCloseBtn");
+const historyBackdrop = document.getElementById("historyBackdrop");
 const composerText = document.getElementById("composerText");
 const composerTextToggle = document.getElementById("composerTextToggle");
 const fabMenu = document.getElementById("fabMenu");
@@ -201,10 +202,15 @@ muteBtn.onclick = () => {
 // devices where :hover never fires.
 function setHistoryOpen(open) {
   historyPanel.classList.toggle("hidden", !open);
+  historyBackdrop.classList.toggle("hidden", !open);
   historyToggleBtn.classList.toggle("history-open", open);
 }
 historyToggleBtn.onclick = () => setHistoryOpen(historyPanel.classList.contains("hidden"));
 historyCloseBtn.onclick = () => setHistoryOpen(false);
+historyBackdrop.onclick = () => setHistoryOpen(false);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !historyPanel.classList.contains("hidden")) setHistoryOpen(false);
+});
 
 // --- Composer text: collapsed by default so voice stays the primary
 // interface; toggle button docked next to it expands/collapses it.

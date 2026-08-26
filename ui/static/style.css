@@ -235,6 +235,15 @@ body {
 }
 .history-panel.hidden { transform: translateX(105%); }
 
+.history-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.08);
+  z-index: 4;
+  transition: opacity 0.2s ease;
+}
+.history-backdrop.hidden { display: none; }
+
 .history-header {
   display: flex;
   align-items: center;
@@ -247,6 +256,8 @@ body {
 }
 .icon-btn.small { width: 30px; height: 30px; }
 .icon-btn.small .icon { width: 16px; height: 16px; }
+.close-x { font-size: 22px; line-height: 1; font-weight: 400; color: var(--ink-soft); }
+.close-x:hover { color: var(--ink); background: var(--blip-blue-pale); }
 
 .log {
   flex: 1;
