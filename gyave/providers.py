@@ -268,6 +268,61 @@ def list_edge_voices(locale_prefix: str | None = None) -> list[dict]:
     return out
 
 
+def list_openai_voices() -> list[dict]:
+    """OpenAI TTS has a fixed, small voice set (not a queryable API) —
+    documented at platform.openai.com/docs/guides/text-to-speech. Returned
+    here as a static list so the Voice Console's voice picker can offer
+    something concrete when "OpenAI TTS" is the selected provider, instead
+    of silently reusing the (irrelevant) edge-tts pt-BR voice list.
+    """
+    names = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+    return [{"short_name": n, "gender": "", "locale": "", "friendly_name": n.capitalize()} for n in names]
+
+
+def list_polly_voices(locale_prefix: str | None = None) -> list[dict]:
+    """List real available AWS Polly neural voices via boto3's
+    `describe_voices`. Fails open to a small static fallback (Camila/
+    Joanna, the two voices GYAVE's speak_polly() defaults reference) if
+    boto3/credentials aren't available — keeps the picker usable even
+    without a live AWS session.
+    """
+    fallback = [
+        {"short_name": "Camila", "gender": "Female", "locale": "pt-BR", "friendly_name": "Camila (PT-BR)"},
+        {"short_name": "Joanna", "gender": "Female", "locale": "en-US", "friendly_name": "Joanna (EN-US)"},
+    ]
+    try:
+        import boto3
+        import os as _os
+        client = boto3.client("polly", region_name=_os.environ.get("GYAVE_AWS_REGION", "us-east-1"))
+        resp = client.describe_voices(Engine="neural")
+        out = []
+        for v in resp.get("Voices", []):
+            locale = v.get("LanguageCode", "")
+            if locale_prefix and not locale.startswith(locale_prefix):
+                continue
+            out.append({
+                "short_name": v.get("Id", ""),
+                "gender": v.get("Gender", ""),
+                "locale": locale,
+                "friendly_name": f"{v.get('Name', v.get('Id', ''))} ({locale})",
+            })
+        return out or fallback
+    except Exception:
+        return fallback
+
+
+def list_espeak_voices() -> list[dict]:
+    """eSpeak/spd-say are fully offline and don't expose a rich voice
+    catalog — return the two languages GYAVE's speak_espeak() actually
+    selects between (pt-br / en), so the picker stays honest about what
+    this provider can do instead of showing unrelated Edge/OpenAI names.
+    """
+    return [
+        {"short_name": "pt-br", "gender": "", "locale": "pt-BR", "friendly_name": "Português (robótico)"},
+        {"short_name": "en", "gender": "", "locale": "en-US", "friendly_name": "English (robotic)"},
+    ]
+
+
 PROVIDERS = {
     "edge": speak_edge,
     "espeak": speak_espeak,

@@ -4,31 +4,59 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>GYAVE — Conversa com o LAO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand">🔊 GYAVE <span class="subtitle">— Give Your Agents Voices</span></div>
-      <div class="controls">
-        <label>CLI:
+      <div class="brand">
+        <i class="icon icon-lg" data-icon="sparkles"></i>
+        <span class="brand-name">GYAVE</span>
+        <span class="subtitle">Give Your Agents Voices</span>
+      </div>
+
+      <button id="settingsToggle" class="icon-btn" title="Configurações de voz">
+        <i class="icon" data-icon="settings-2"></i>
+      </button>
+    </header>
+
+    <div id="settingsPanel" class="settings-panel hidden">
+      <div class="settings-grid">
+        <label>
+          <span>CLI / Engine</span>
           <select id="engineSelect">
             <option value="auto">Auto (melhor disponível)</option>
           </select>
         </label>
-        <label>Voz:
+        <label>
+          <span>Provedor de voz (TTS)</span>
+          <select id="ttsProviderSelect"></select>
+        </label>
+        <label>
+          <span>Voz</span>
           <select id="voiceSelect"></select>
         </label>
-        <label>Captura:
+        <label>
+          <span>Captura (STT)</span>
           <select id="sttModeSelect">
-            <option value="webspeech">Navegador (Web Speech, rápido)</option>
-            <option value="local">Whisper local (melhor precisão)</option>
+            <option value="webspeech">Navegador (Web Speech)</option>
+            <option value="local">Whisper local</option>
             <option value="openai">Whisper OpenAI (nuvem)</option>
           </select>
         </label>
-        <button id="muteBtn" title="Silenciar/ativar voz">🔈</button>
+        <label class="slider-label">
+          <span>Velocidade <b id="rateVal">+0%</b></span>
+          <input type="range" id="rateSlider" min="-50" max="50" value="0" step="5" />
+        </label>
+        <label class="slider-label">
+          <span>Volume <b id="volumeVal">+0%</b></span>
+          <input type="range" id="volumeSlider" min="-50" max="50" value="0" step="5" />
+        </label>
       </div>
-    </header>
+    </div>
 
     <main class="stage">
       <div class="mascot-area">
@@ -40,9 +68,17 @@
     </main>
 
     <footer class="composer">
-      <button id="micBtn" class="mic-btn" title="Segure para falar (ou clique para alternar)">🎤</button>
+      <button id="muteBtn" class="icon-btn" title="Silenciar/ativar voz">
+        <i class="icon" data-icon="volume-2"></i>
+      </button>
+      <button id="micBtn" class="mic-btn" title="Clique para falar">
+        <i class="icon icon-invert" data-icon="mic"></i>
+      </button>
       <input id="textInput" type="text" placeholder="Digite ou fale sua mensagem para o LAO..." />
-      <button id="sendBtn" class="send-btn">Enviar</button>
+      <button id="sendBtn" class="send-btn">
+        <i class="icon icon-invert" data-icon="send"></i>
+        Enviar
+      </button>
     </footer>
   </div>
 

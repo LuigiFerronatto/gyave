@@ -3,14 +3,36 @@ const stateLabel = document.getElementById("stateLabel");
 const log = document.getElementById("log");
 const engineSelect = document.getElementById("engineSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const ttsProviderSelect = document.getElementById("ttsProviderSelect");
 const sttModeSelect = document.getElementById("sttModeSelect");
 const muteBtn = document.getElementById("muteBtn");
 const micBtn = document.getElementById("micBtn");
 const textInput = document.getElementById("textInput");
 const sendBtn = document.getElementById("sendBtn");
+const settingsToggle = document.getElementById("settingsToggle");
+const settingsPanel = document.getElementById("settingsPanel");
+const rateSlider = document.getElementById("rateSlider");
+const volumeSlider = document.getElementById("volumeSlider");
+const rateVal = document.getElementById("rateVal");
+const volumeVal = document.getElementById("volumeVal");
 
 let muted = false;
 let ws;
+
+settingsToggle.onclick = () => settingsPanel.classList.toggle("hidden");
+
+function setMicIcon(isRecording) {
+  const icon = micBtn.querySelector(".icon");
+  if (icon) icon.setAttribute("data-icon", isRecording ? "mic-off" : "mic");
+}
+
+
+function fmtPct(v) {
+  const n = Number(v);
+  return `${n >= 0 ? "+" : ""}${n}%`;
+}
+rateSlider.addEventListener("input", () => { rateVal.textContent = fmtPct(rateSlider.value); });
+volumeSlider.addEventListener("input", () => { volumeVal.textContent = fmtPct(volumeSlider.value); });
 
 const STATE_LABELS = {
   idle: "pronto",
@@ -64,9 +86,11 @@ async function loadEngines() {
   });
 }
 
-async function loadVoices() {
-  const res = await fetch("/api/voices");
+async function loadVoices(provider) {
+  const p = provider || (ttsProviderSelect ? ttsProviderSelect.value : "edge") || "edge";
+  const res = await fetch(`/api/voices?provider=${encodeURIComponent(p)}`);
   const data = await res.json();
+  voiceSelect.innerHTML = "";
   (data.voices || []).forEach((v) => {
     const opt = document.createElement("option");
     opt.value = v.id;
@@ -75,8 +99,24 @@ async function loadVoices() {
   });
 }
 
+async function loadTtsProviders() {
+  const res = await fetch("/api/tts-providers");
+  const data = await res.json();
+  (data.providers || []).forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.label}${p.available ? "" : " (indisponível)"}`;
+    opt.disabled = !p.available;
+    ttsProviderSelect.appendChild(opt);
+  });
+}
+
 loadEngines();
-loadVoices();
+(async () => {
+  await loadTtsProviders();
+  ttsProviderSelect.addEventListener("change", () => loadVoices(ttsProviderSelect.value));
+  await loadVoices(ttsProviderSelect.value);
+})();
 
 function sendMessage(text) {
   if (!text.trim()) return;
@@ -86,6 +126,9 @@ function sendMessage(text) {
     text,
     engine: engineSelect.value,
     voice: voiceSelect.value,
+    tts_provider: ttsProviderSelect.value,
+    rate: fmtPct(rateSlider.value),
+    volume: fmtPct(volumeSlider.value),
     mute: muted,
   }));
   textInput.value = "";
@@ -99,7 +142,8 @@ textInput.addEventListener("keydown", (e) => {
 muteBtn.onclick = () => {
   muted = !muted;
   muteBtn.classList.toggle("muted", muted);
-  muteBtn.textContent = muted ? "🔇" : "🔈";
+  const icon = muteBtn.querySelector(".icon");
+  icon.setAttribute("data-icon", muted ? "volume-x" : "volume-2");
 };
 
 // --- STT: three interchangeable capture modes, selected via sttModeSelect
@@ -133,8 +177,8 @@ function setupWebSpeech() {
     }
     if (finalText) sendMessage(finalText);
   };
-  r.onend = () => { recording = false; micBtn.classList.remove("recording"); setMascotState("idle"); };
-  r.onerror = () => { recording = false; micBtn.classList.remove("recording"); setMascotState("idle"); };
+  r.onend = () => { recording = false; micBtn.classList.remove("recording"); setMicIcon(false); setMascotState("idle"); };
+  r.onerror = () => { recording = false; micBtn.classList.remove("recording"); setMicIcon(false); setMascotState("idle"); };
   return r;
 }
 recognizer = setupWebSpeech();
@@ -169,6 +213,7 @@ async function startMediaRecorderCapture(provider) {
     mediaRecorder.start();
     recording = true;
     micBtn.classList.add("recording");
+    setMicIcon(true);
     setMascotState("listening");
   } catch (err) {
     addBubble("system", `🔇 Não consegui acessar o microfone: ${err}`, false);
@@ -181,6 +226,7 @@ function stopMediaRecorderCapture() {
   }
   recording = false;
   micBtn.classList.remove("recording");
+  setMicIcon(false);
 }
 
 micBtn.onclick = () => {
@@ -193,6 +239,7 @@ micBtn.onclick = () => {
     if (recording) { recognizer.stop(); return; }
     recording = true;
     micBtn.classList.add("recording");
+    setMicIcon(true);
     setMascotState("listening");
     recognizer.start();
     return;

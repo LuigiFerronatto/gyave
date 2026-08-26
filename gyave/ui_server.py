@@ -82,8 +82,75 @@ def api_engines():
 
 
 @app.get("/api/voices")
-def api_voices():
-    return {"voices": VOICES}
+def api_voices(provider: str = "edge"):
+    """Return the voice list for the SELECTED TTS provider — each engine
+    has a different, incompatible voice namespace (edge-tts ShortNames
+    like "pt-BR-AntonioNeural" vs. OpenAI's "alloy" vs. Polly's "Camila"
+    vs. espeak's bare language codes), so the picker must refresh whenever
+    the provider changes instead of always showing the fixed edge-tts list.
+    """
+    from gyave.providers import list_edge_voices, list_openai_voices, list_polly_voices, list_espeak_voices
+
+    if provider == "edge":
+        voices = list_edge_voices("pt-") + list_edge_voices("en-")
+        if not voices:  # network unavailable — fail open to the static curated list
+            voices = VOICES
+        else:
+            voices = [
+                {"id": v["short_name"], "label": f"{v['friendly_name']} ({v['locale']}, {v['gender'] or '?'})"}
+                for v in voices
+            ]
+    elif provider == "openai":
+        voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_openai_voices()]
+    elif provider == "polly":
+        voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_polly_voices()]
+    elif provider == "espeak":
+        voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_espeak_voices()]
+    else:  # silent — no real voice concept
+        voices = [{"id": "silent", "label": "N/A (modo silencioso)"}]
+
+    return {"voices": voices}
+
+
+@app.get("/api/tts-providers")
+def api_tts_providers():
+    """List TTS providers the Voice Console can switch between, with
+    whether each is actually usable right now (installed + credentialed).
+    Powers the frontend's provider picker so switching isn't limited to
+    `GYAVE_ENGINE=...`/`gyave provider ...` on the CLI.
+    """
+    import os as _os
+    from gyave.providers import PROVIDERS
+
+    def _available(name: str) -> bool:
+        if name in ("edge", "espeak", "silent"):
+            return True  # edge/espeak fail open at speak-time; always offer
+        if name == "openai":
+            try:
+                import openai  # noqa: F401
+            except ImportError:
+                return False
+            return bool(_os.environ.get("OPENAI_API_KEY"))
+        if name == "polly":
+            try:
+                import boto3  # noqa: F401
+            except ImportError:
+                return False
+            return bool(_os.environ.get("AWS_ACCESS_KEY_ID")) or Path.home().joinpath(".aws/credentials").exists()
+        return True
+
+    labels = {
+        "edge": "Microsoft Edge (gratuito, neural)",
+        "openai": "OpenAI TTS (pago)",
+        "polly": "AWS Polly (pago)",
+        "espeak": "eSpeak (offline, robótico)",
+        "silent": "Silencioso (log apenas)",
+    }
+    out = [
+        {"id": name, "label": labels.get(name, name), "available": _available(name)}
+        for name in PROVIDERS
+    ]
+    return {"providers": out}
 
 
 @app.post("/api/stt")
@@ -179,6 +246,9 @@ async def ws_endpoint(websocket: WebSocket):
             text = (msg.get("text") or "").strip()
             engine = msg.get("engine") or "auto"
             voice = msg.get("voice") or "pt-BR-AntonioNeural"
+            tts_provider = msg.get("tts_provider") or "edge"
+            rate = msg.get("rate")
+            volume = msg.get("volume")
             mute = bool(msg.get("mute"))
             cwd = msg.get("cwd") or DEFAULT_REPO
             if not text:
@@ -206,6 +276,11 @@ async def ws_endpoint(websocket: WebSocket):
             cfg = Config.load()
             cfg.voice = voice
             cfg.mute = mute
+            cfg.engine = tts_provider
+            if rate:
+                cfg.rate = rate
+            if volume:
+                cfg.volume = volume
             # The Voice Console is an active conversation, not passive hook
             # narration — talkback-win's ~800-char "skip long analytical
             # output" heuristic (kept as-is for hooks) was silently
