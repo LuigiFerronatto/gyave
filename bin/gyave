@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# GYAVE launcher — always resolves to the dedicated venv, regardless of
+# which shell/virtualenv/CLI invoked it (important: hook commands run in
+# the CLI's own shell context, which may have an unrelated venv active).
+GYAVE_HOME="${GYAVE_HOME:-$HOME/.gyave}"
+exec "$GYAVE_HOME/venv/bin/python3" -m gyave "$@"

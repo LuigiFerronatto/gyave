@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+gyave.egg-info/
+gyave.log
+config.json
+.mute
+*.wav
+*.mp3
+.env

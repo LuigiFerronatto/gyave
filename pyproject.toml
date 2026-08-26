@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gyave"
+version = "0.2.0"
+description = "Give Your Agents Voices — CLI-agnostic TTS/STT harness for coding-agent CLIs"
+requires-python = ">=3.9"
+dependencies = ["edge-tts>=6.1.0", "fastapi>=0.110", "uvicorn[standard]>=0.29", "websockets>=12.0", "python-multipart>=0.0.9"]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0"]
+aws = ["boto3>=1.34"]
+whisper = ["faster-whisper>=1.0"]
+all = ["openai>=1.0", "boto3>=1.34", "faster-whisper>=1.0"]
+
+[tool.setuptools]
+packages = ["gyave"]
