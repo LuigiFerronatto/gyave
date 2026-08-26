@@ -59,7 +59,7 @@ def _play_file(path: Path) -> bool:
         return False
 
 
-def speak_edge(text: str, cfg: Config) -> bool:
+def speak_edge(text: str, cfg: Config, play_fn=None) -> bool:
     """Microsoft Edge Read-Aloud TTS via the `edge-tts` python package.
     Free, no API key, 300+ neural voices — but not offline (network call to
     Microsoft's endpoint) and unofficial/reverse-engineered.
@@ -129,7 +129,8 @@ def speak_edge(text: str, cfg: Config) -> bool:
                 next_future = pool.submit(_synthesize_sync, chunks[i + 1])
             if out_path is not None:
                 try:
-                    if _play_file(out_path):
+                    actual_play = play_fn or _play_file
+                    if actual_play(out_path):
                         any_played = True
                 except Exception:
                     pass
@@ -138,7 +139,7 @@ def speak_edge(text: str, cfg: Config) -> bool:
     return any_played
 
 
-def speak_openai(text: str, cfg: Config) -> bool:
+def speak_openai(text: str, cfg: Config, play_fn=None) -> bool:
     """OpenAI TTS — paid, requires `OPENAI_API_KEY`. Default model is
     `gpt-4o-mini-tts` (best quality, supports `instructions` parameter for
     tone/accent/emotion control). Override with `GYAVE_OPENAI_TTS_MODEL` for
@@ -214,7 +215,8 @@ def speak_openai(text: str, cfg: Config) -> bool:
                 next_future = pool.submit(_synthesize_sync, chunks[i + 1])
             if out_path is not None:
                 try:
-                    if _play_file(out_path):
+                    actual_play = play_fn or _play_file
+                    if actual_play(out_path):
                         any_played = True
                 except Exception:
                     pass
@@ -223,7 +225,7 @@ def speak_openai(text: str, cfg: Config) -> bool:
     return any_played
 
 
-def speak_polly(text: str, cfg: Config) -> bool:
+def speak_polly(text: str, cfg: Config, play_fn=None) -> bool:
     """AWS Polly neural TTS — paid, requires AWS credentials (standard
     boto3 credential chain: env vars, `~/.aws/credentials`, or an
     instance/role profile). Added to GYAVE's provider pool after auditing
@@ -260,7 +262,8 @@ def speak_polly(text: str, cfg: Config) -> bool:
                 out_path = Path(tmp.name)
                 tmp.write(audio_bytes)
             try:
-                if _play_file(out_path):
+                actual_play = play_fn or _play_file
+                if actual_play(out_path):
                     any_played = True
             finally:
                 out_path.unlink(missing_ok=True)
@@ -269,7 +272,7 @@ def speak_polly(text: str, cfg: Config) -> bool:
     return any_played
 
 
-def speak_espeak(text: str, cfg: Config) -> bool:
+def speak_espeak(text: str, cfg: Config, play_fn=None) -> bool:
     """Fully offline, robotic fallback via espeak-ng or spd-say."""
     if shutil.which("espeak-ng"):
         binname = "espeak-ng"
@@ -297,7 +300,7 @@ def _looks_pt(text: str) -> bool:
     return any(h in text.lower() for h in hints)
 
 
-def speak_silent(text: str, cfg: Config) -> bool:
+def speak_silent(text: str, cfg: Config, play_fn=None) -> bool:
     """No-op provider: just logs. Used on hosts with no audio device, or for
     dry-run/testing.
     """
@@ -411,7 +414,7 @@ PROVIDERS = {
 AUTO_ORDER = ["edge", "espeak", "silent"]
 
 
-def speak(text: str, cfg: Config) -> tuple[bool, str]:
+def speak(text: str, cfg: Config, play_fn=None) -> tuple[bool, str]:
     """Try the configured engine; fall back through AUTO_ORDER on failure.
     Returns (success, engine_used).
     """
@@ -420,6 +423,13 @@ def speak(text: str, cfg: Config) -> tuple[bool, str]:
     ]
     for engine in order:
         fn = PROVIDERS.get(engine)
-        if fn and fn(text, cfg):
-            return True, engine
+        if fn:
+            try:
+                # Some engines might not support play_fn yet, but we will add it to all.
+                # Just in case, we call with play_fn.
+                if fn(text, cfg, play_fn):
+                    return True, engine
+            except TypeError:
+                if fn(text, cfg):
+                    return True, engine
     return False, "none"

@@ -23,7 +23,7 @@ def _log(msg: str, cfg: Config) -> None:
         pass
 
 
-def speak_text(raw_text: str, cfg: Config | None = None) -> tuple[bool, str]:
+def speak_text(raw_text: str, cfg: Config | None = None, play_fn=None) -> tuple[bool, str]:
     """Main entry point: filter + speak arbitrary text. Returns
     (spoken, reason) — reason is "" on success, otherwise the skip reason
     (e.g. "too long", "structured list") or "provider failed" so callers
@@ -41,7 +41,7 @@ def speak_text(raw_text: str, cfg: Config | None = None) -> tuple[bool, str]:
         _log(f"skip: {verdict.reason}", cfg)
         return False, verdict.reason
 
-    ok, engine_used = providers.speak(verdict.text, cfg)
+    ok, engine_used = providers.speak(verdict.text, cfg, play_fn)
     _log(f"{'spoke' if ok else 'FAILED'} via {engine_used}: {verdict.text[:120]!r}", cfg)
     return ok, ("" if ok else f"provider '{engine_used}' failed")
 

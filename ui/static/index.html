@@ -46,6 +46,13 @@
             <option value="openai">Whisper OpenAI (nuvem)</option>
           </select>
         </label>
+        <label>
+          <span>Saída de Áudio</span>
+          <select id="audioOutputSelect">
+            <option value="system">Sistema (Local/Backend)</option>
+            <option value="browser">Navegador (Web)</option>
+          </select>
+        </label>
         <label class="slider-label">
           <span>Velocidade <b id="rateVal">+0%</b></span>
           <input type="range" id="rateSlider" min="-50" max="50" value="0" step="5" />

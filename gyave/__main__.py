@@ -8,6 +8,7 @@ Usage:
   <hook payload json> | gyave hook gemini    # Gemini CLI AfterAgent hook
   gyave test                            # play a short confirmation phrase
   gyave mute / gyave unmute              # toggle the session-wide mute flag
+  gyave stop                             # stop active audio playback immediately
   gyave ui [--port=8765] [--no-browser]  # launch the Voice Console (web UI)
   gyave status                           # show current engine/voice/rate/mute
   gyave provider <name>                  # switch default TTS provider (persists)
@@ -93,6 +94,23 @@ def _cmd_mute(_argv: list[str]) -> int:
 def _cmd_unmute(_argv: list[str]) -> int:
     MUTE_FLAG_FILE.unlink(missing_ok=True)
     print("GYAVE unmuted.")
+    return 0
+
+
+def _cmd_stop(_argv: list[str]) -> int:
+    import subprocess
+    # Kill the detached daemon processes that might be speaking files
+    try:
+        subprocess.run(["pkill", "-f", "gyave _speak-file"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+    # Kill the audio players individually to ensure maximum compatibility
+    for player in ["ffplay", "paplay", "aplay", "afplay"]:
+        try:
+            subprocess.run(["pkill", "-x", player], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    print("✅ Reprodução de áudio interrompida.")
     return 0
 
 
@@ -321,6 +339,7 @@ COMMANDS = {
     "test": _cmd_test,
     "mute": _cmd_mute,
     "unmute": _cmd_unmute,
+    "stop": _cmd_stop,
     "ui": _cmd_ui,
     "status": _cmd_status,
     "provider": _cmd_provider,

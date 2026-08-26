@@ -180,7 +180,7 @@ gyave/
 ├── adapters.py    # per-CLI transcript parsers (the ONLY CLI-specific code)
 ├── core.py        # orchestration — never raises, fails open
 ├── ui_server.py    # FastAPI backend for the Voice Console
-└── __main__.py    # `gyave speak|hook|test|mute|unmute|ui`
+└── __main__.py    # `gyave speak|hook|test|mute|unmute|stop|ui`
 ```
 
 Adding a new CLI only ever touches **one file** on each integration path:
@@ -222,6 +222,8 @@ gyave voices pt-          # list REAL available edge-tts voices for a locale
 gyave rate +15%
 gyave volume -10%
 gyave pitch +5Hz
+gyave mute / unmute       # toggle global mute (persists)
+gyave stop                # stop active audio playback immediately without muting
 gyave doctor              # diagnose a broken install (deps, player, creds)
 ```
 

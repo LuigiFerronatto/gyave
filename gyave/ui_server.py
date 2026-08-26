@@ -343,16 +343,34 @@ def _run_invoke(engine: str, prompt: str, cwd: str | None) -> dict:
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     loop = asyncio.get_event_loop()
+    
+    chunk_events = {}
+    user_msg_queue = asyncio.Queue()
+    
+    async def receiver():
+        try:
+            while True:
+                raw = await websocket.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except Exception:
+                    continue
+                if msg.get("type") == "audio_ended":
+                    cid = msg.get("chunk_id")
+                    if cid in chunk_events:
+                        chunk_events[cid].set()
+                elif msg.get("type") == "user_message":
+                    await user_msg_queue.put(msg)
+        except WebSocketDisconnect:
+            # Set all pending events to unblock any waiting thread
+            for evt in list(chunk_events.values()):
+                evt.set()
+    
+    recv_task = asyncio.create_task(receiver())
+    
     try:
         while True:
-            raw = await websocket.receive_text()
-            try:
-                msg = json.loads(raw)
-            except Exception:
-                continue
-            if msg.get("type") != "user_message":
-                continue
-
+            msg = await user_msg_queue.get()
             text = (msg.get("text") or "").strip()
             engine = msg.get("engine") or "auto"
             voice = msg.get("voice") or "pt-BR-AntonioNeural"
@@ -360,6 +378,7 @@ async def ws_endpoint(websocket: WebSocket):
             rate = msg.get("rate")
             volume = msg.get("volume")
             mute = bool(msg.get("mute"))
+            audio_output = msg.get("audio_output") or "system"
             cwd = msg.get("cwd") or DEFAULT_REPO
             if not text:
                 continue
@@ -404,7 +423,47 @@ async def ws_endpoint(websocket: WebSocket):
             import os as _os
             cfg.max_chars = int(_os.environ.get("GYAVE_CONSOLE_MAX_CHARS", str(cfg.max_chars)))
             cfg.max_bullets = int(_os.environ.get("GYAVE_CONSOLE_MAX_BULLETS", str(cfg.max_bullets)))
-            spoken, skip_reason = await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
+            
+            def _browser_play_fn(out_path) -> bool:
+                import base64
+                import uuid
+                try:
+                    with out_path.open("rb") as f:
+                        data = f.read()
+                    b64 = base64.b64encode(data).decode("utf-8")
+                    
+                    mime = "audio/mpeg"
+                    if out_path.suffix == ".wav":
+                        mime = "audio/wav"
+                    elif out_path.suffix == ".ogg":
+                        mime = "audio/ogg"
+                    
+                    cid = str(uuid.uuid4())
+                    evt = asyncio.Event()
+                    chunk_events[cid] = evt
+                    
+                    asyncio.run_coroutine_threadsafe(
+                        websocket.send_json({
+                            "type": "audio_chunk",
+                            "chunk_id": cid,
+                            "data": b64,
+                            "mime_type": mime
+                        }),
+                        loop
+                    )
+                    
+                    try:
+                        asyncio.run_coroutine_threadsafe(evt.wait(), loop).result(timeout=60)
+                    except Exception:
+                        pass
+                    finally:
+                        chunk_events.pop(cid, None)
+                    return True
+                except Exception:
+                    return False
+            
+            play_fn = _browser_play_fn if audio_output == "browser" else None
+            spoken, skip_reason = await loop.run_in_executor(None, core.speak_text, reply_text, cfg, play_fn)
             if not spoken and not mute:
                 await websocket.send_json({
                     "type": "tts_skipped",
@@ -412,8 +471,10 @@ async def ws_endpoint(websocket: WebSocket):
                 })
 
             await websocket.send_json({"type": "state", "value": "idle"})
-    except WebSocketDisconnect:
+    except Exception:
         pass
+    finally:
+        recv_task.cancel()
 
 
 def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True):

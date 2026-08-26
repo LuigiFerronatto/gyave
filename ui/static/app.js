@@ -5,6 +5,7 @@ const engineSelect = document.getElementById("engineSelect");
 const voiceSelect = document.getElementById("voiceSelect");
 const ttsProviderSelect = document.getElementById("ttsProviderSelect");
 const sttModeSelect = document.getElementById("sttModeSelect");
+const audioOutputSelect = document.getElementById("audioOutputSelect");
 const muteBtn = document.getElementById("muteBtn");
 const micBtn = document.getElementById("micBtn");
 const textInput = document.getElementById("textInput");
@@ -102,6 +103,32 @@ function addBubble(role, text, isError) {
   log.scrollTop = log.scrollHeight;
 }
 
+let audioQueue = [];
+let currentAudio = null;
+
+function playNextAudio() {
+  if (audioQueue.length === 0 || currentAudio) return;
+  const chunk = audioQueue.shift();
+  currentAudio = new Audio(chunk.dataUri);
+  currentAudio.chunk_id = chunk.id;
+  currentAudio.onended = () => {
+    ws.send(JSON.stringify({ type: "audio_ended", chunk_id: chunk.id }));
+    currentAudio = null;
+    playNextAudio();
+  };
+  currentAudio.onerror = () => {
+    ws.send(JSON.stringify({ type: "audio_ended", chunk_id: chunk.id }));
+    currentAudio = null;
+    playNextAudio();
+  };
+  currentAudio.play().catch(e => {
+    console.error("Autoplay error", e);
+    ws.send(JSON.stringify({ type: "audio_ended", chunk_id: chunk.id }));
+    currentAudio = null;
+    playNextAudio();
+  });
+}
+
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -117,6 +144,14 @@ function connectWs() {
       setEngineBadge(msg.engine, msg.error ? "error" : "active");
     } else if (msg.type === "tts_skipped") {
       addBubble("system", `🔇 ${msg.text}`, false);
+    } else if (msg.type === "audio_chunk") {
+      if (muted) {
+        ws.send(JSON.stringify({ type: "audio_ended", chunk_id: msg.chunk_id }));
+        return;
+      }
+      const dataUri = `data:${msg.mime_type || "audio/mpeg"};base64,${msg.data}`;
+      audioQueue.push({ id: msg.chunk_id, dataUri });
+      playNextAudio();
     }
   };
   ws.onclose = () => { setEngineBadge(null, "error"); setTimeout(connectWs, 1500); };
@@ -180,6 +215,7 @@ function sendMessage(text) {
     rate: fmtPct(rateSlider.value),
     volume: fmtPct(volumeSlider.value),
     mute: muted,
+    audio_output: audioOutputSelect.value,
   }));
   textInput.value = "";
 }
@@ -195,6 +231,16 @@ muteBtn.onclick = () => {
   const icon = muteBtn.querySelector(".icon");
   icon.setAttribute("data-icon", muted ? "volume-x" : "volume-2");
   mascot.classList.toggle("muted", muted);
+  if (muted) {
+    audioQueue = [];
+    if (currentAudio) {
+      try {
+        currentAudio.pause();
+      } catch (e) {}
+      ws.send(JSON.stringify({ type: "audio_ended", chunk_id: currentAudio.chunk_id }));
+      currentAudio = null;
+    }
+  }
 };
 
 // --- History panel: hidden by default, opened from the FAB's hover menu.
