@@ -23,24 +23,27 @@ def _log(msg: str, cfg: Config) -> None:
         pass
 
 
-def speak_text(raw_text: str, cfg: Config | None = None) -> bool:
-    """Main entry point: filter + speak arbitrary text. Returns True if audio
-    was actually played.
+def speak_text(raw_text: str, cfg: Config | None = None) -> tuple[bool, str]:
+    """Main entry point: filter + speak arbitrary text. Returns
+    (spoken, reason) — reason is "" on success, otherwise the skip reason
+    (e.g. "too long", "structured list") or "provider failed" so callers
+    (like the Voice Console) can show something more useful than a blanket
+    "didn't play" message.
     """
     cfg = cfg or Config.load()
 
     if cfg.mute:
         _log("muted, skipping", cfg)
-        return False
+        return False, "muted"
 
     verdict = filters.evaluate(raw_text, cfg)
     if not verdict.speak:
         _log(f"skip: {verdict.reason}", cfg)
-        return False
+        return False, verdict.reason
 
     ok, engine_used = providers.speak(verdict.text, cfg)
     _log(f"{'spoke' if ok else 'FAILED'} via {engine_used}: {verdict.text[:120]!r}", cfg)
-    return ok
+    return ok, ("" if ok else f"provider '{engine_used}' failed")
 
 
 def speak_from_hook(hook_kind: str, payload: dict, cfg: Config | None = None) -> bool:
@@ -53,4 +56,5 @@ def speak_from_hook(hook_kind: str, payload: dict, cfg: Config | None = None) ->
     if not text:
         _log(f"hook={hook_kind}: no resolvable text in payload", cfg)
         return False
-    return speak_text(text, cfg)
+    ok, _reason = speak_text(text, cfg)
+    return ok

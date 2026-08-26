@@ -12,10 +12,9 @@
 <body>
   <div class="app">
     <header class="topbar">
+      <div class="brand-spacer"></div>
       <div class="brand">
-        <i class="icon icon-lg" data-icon="sparkles"></i>
-        <span class="brand-name">GYAVE</span>
-        <span class="subtitle">Give Your Agents Voices</span>
+        <img src="/static/logo/gyave.png" alt="GYAVE — Give Your Agents Voices" class="brand-logo" />
       </div>
 
       <button id="settingsToggle" class="icon-btn" title="Configurações de voz">
@@ -59,25 +58,59 @@
     </div>
 
     <main class="stage">
+      <!-- Solo mascot stage: no chat history visible by default, per user
+           request — the mascot IS the interface. History lives in a
+           slide-over panel toggled from the FAB's hover menu. -->
       <div class="mascot-area">
+        <div id="engineBadge" class="engine-badge">
+          <i class="icon" data-icon="cpu"></i>
+          <span id="engineBadgeText">nenhum CLI ativado ainda</span>
+        </div>
         <img id="mascot" src="/static/mascots/idle.png" alt="LAO" />
         <div id="stateLabel" class="state-label">pronto</div>
       </div>
 
-      <div class="log" id="log"></div>
+      <!-- Collapsible chat history — hidden by default, opened via the
+           FAB's hover menu ("Ver histórico"). -->
+      <aside id="historyPanel" class="history-panel hidden">
+        <div class="history-header">
+          <span>Histórico da conversa</span>
+          <button id="historyCloseBtn" class="icon-btn small" title="Fechar histórico">
+            <i class="icon" data-icon="volume-x"></i>
+          </button>
+        </div>
+        <div class="log" id="log"></div>
+      </aside>
     </main>
 
     <footer class="composer">
-      <button id="muteBtn" class="icon-btn" title="Silenciar/ativar voz">
-        <i class="icon" data-icon="volume-2"></i>
-      </button>
-      <button id="micBtn" class="mic-btn" title="Clique para falar">
-        <i class="icon icon-invert" data-icon="mic"></i>
-      </button>
-      <input id="textInput" type="text" placeholder="Digite ou fale sua mensagem para o LAO..." />
-      <button id="sendBtn" class="send-btn">
-        <i class="icon icon-invert" data-icon="send"></i>
-        Enviar
+      <!-- Central FAB: the primary voice/mic control. Hovering reveals a
+           small radial-ish menu with Histórico / Mutar, as requested —
+           these used to be separate always-visible icon buttons. -->
+      <div class="fab-wrap">
+        <div class="fab-menu" id="fabMenu">
+          <button id="historyToggleBtn" class="fab-menu-btn" title="Ver histórico">
+            <i class="icon" data-icon="message-circle"></i>
+          </button>
+          <button id="muteBtn" class="fab-menu-btn" title="Silenciar/ativar voz">
+            <i class="icon" data-icon="volume-2"></i>
+          </button>
+        </div>
+        <button id="micBtn" class="mic-fab" title="Clique para falar">
+          <i class="icon icon-invert icon-fab" data-icon="mic"></i>
+        </button>
+      </div>
+
+      <!-- Text input stays separate from the FAB, docked to the right,
+           and can be collapsed entirely when voice-only is preferred. -->
+      <div class="composer-text" id="composerText">
+        <input id="textInput" type="text" placeholder="Digite ou fale sua mensagem para o LAO..." />
+        <button id="sendBtn" class="send-btn">
+          <i class="icon icon-invert" data-icon="send"></i>
+        </button>
+      </div>
+      <button id="composerTextToggle" class="icon-btn" title="Mostrar/ocultar campo de texto">
+        <i class="icon" data-icon="chevron-down"></i>
       </button>
     </footer>
   </div>

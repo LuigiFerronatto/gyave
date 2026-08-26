@@ -293,11 +293,22 @@ async def ws_endpoint(websocket: WebSocket):
             # regardless of context.
             import os as _os
             cfg.max_chars = int(_os.environ.get("GYAVE_CONSOLE_MAX_CHARS", "6000"))
-            spoken = await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
+            # Same reasoning as max_chars above: talkback-win's "3+ bullets"
+            # / "40% code fences" heuristics were tuned for passive hook
+            # narration of arbitrary agent output, not an active back-and-
+            # forth conversation where the user is looking at the mascot
+            # and expects *some* audio for every reply. A short numbered
+            # self-introduction (e.g. "1. Scout 2. Strategist...") was
+            # being silently vetoed by max_bullets=3 even though it reads
+            # fine aloud. Console gets a much higher bullet ceiling;
+            # max_code_fence_ratio stays tight since a code dump genuinely
+            # doesn't speak well regardless of context.
+            cfg.max_bullets = int(_os.environ.get("GYAVE_CONSOLE_MAX_BULLETS", "12"))
+            spoken, skip_reason = await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
             if not spoken and not mute:
                 await websocket.send_json({
                     "type": "tts_skipped",
-                    "text": "Áudio não tocado (resposta muito estruturada/longa para falar, ou provedor de voz indisponível).",
+                    "text": f"Áudio não tocado ({skip_reason or 'motivo desconhecido'}).",
                 })
 
             await websocket.send_json({"type": "state", "value": "idle"})

@@ -35,7 +35,7 @@ def _cmd_speak(argv: list[str]) -> int:
         text = " ".join(argv)
     else:
         text = sys.stdin.read()
-    ok = core.speak_text(text)
+    ok, _reason = core.speak_text(text)
     return 0  # always exit 0 — never block/fail the calling agent
 
 
@@ -50,8 +50,8 @@ def _cmd_hook(argv: list[str]) -> int:
 
 def _cmd_test(argv: list[str]) -> int:
     phrase = " ".join(argv) or "GYAVE está funcionando. Seu agente agora pode falar."
-    ok = core.speak_text(phrase, Config.load())
-    print("OK" if ok else "FAILED (check ~/.gyave/gyave.log)")
+    ok, reason = core.speak_text(phrase, Config.load())
+    print("OK" if ok else f"FAILED: {reason} (check ~/.gyave/gyave.log)")
     return 0 if ok else 1
 
 
