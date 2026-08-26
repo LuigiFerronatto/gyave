@@ -1,20 +1,32 @@
 """GYAVE Voice Console — backend.
 
 A tiny local web app (FastAPI + a single WebSocket) that lets a human talk
-to LAO through whichever CLI engine they pick (Claude Code / Copilot CLI /
-Gemini CLI, via lao_core.engine_router), see a mascot react to what's
+to whichever project/agent they're pointed at, through whichever CLI
+engine they pick (Claude Code / Copilot CLI / Gemini CLI / etc, via
+GYAVE's own `gyave.engine_router`), see a mascot react to what's
 happening, and hear the reply spoken back via GYAVE.
 
 Deliberately turn-based (not a full interactive pty session): each user
-message becomes one `engine_router.py invoke` call. This is a conscious v1
+message becomes one headless CLI invoke call. This is a conscious v1
 scope cut — see docs/GYAVE.md "Known limitations" — full tool-by-tool
 streaming would require per-engine stream-json parsing that's only
 confirmed for Claude today.
+
+Project-agnostic by design (fixed 2026-08-26): GYAVE used to hard-import
+`lao_core.engine_router` from a fixed path
+(`/home/.../lab-autonomous-officer`), meaning the Console only ever
+"spoke with" that one repo/project regardless of which `cwd` a message
+carried — a wrong project's agent could be invoked while GYAVE silently
+routed through LAO's own module. `gyave.engine_router` (this package) is
+now the default, self-contained router; the request's own `cwd` (sent by
+the frontend, defaulting to wherever the GYAVE server process itself was
+started) is what's passed to the invoked CLI, not any hardcoded repo path.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import threading
 import webbrowser
@@ -25,29 +37,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from gyave import core, stt
+from gyave import engine_router
 from gyave.config import Config, GYAVE_HOME
 
 STATIC_DIR = GYAVE_HOME / "ui" / "static"
+_IMPORT_ERROR = None
 
-# lao_core.engine_router lives inside the LAO repo, not inside ~/.gyave.
-# GYAVE_LAO_REPO lets the console point at whichever checkout is active;
-# falls back to the well-known path used throughout this machine's setup.
-import os
-
-DEFAULT_REPO = os.environ.get(
-    "GYAVE_LAO_REPO",
-    "/home/luigiferronatto/Desktop/Workspace/lab-autonomous-officer",
-)
-if DEFAULT_REPO not in sys.path:
-    sys.path.insert(0, DEFAULT_REPO)
-
-try:
-    from lao_core import engine_router
-except Exception as exc:  # pragma: no cover - surfaced to the UI instead
-    engine_router = None
-    _IMPORT_ERROR = str(exc)
-else:
-    _IMPORT_ERROR = None
+# The working directory the invoked CLI runs in when a websocket message
+# doesn't specify its own `cwd` — defaults to wherever the GYAVE server
+# process itself was launched from (i.e. `cd my-project && gyave ui`),
+# NOT a hardcoded repo. GYAVE_DEFAULT_CWD is an explicit opt-in override
+# for anyone who wants a different fallback without touching launch cwd.
+DEFAULT_REPO = os.environ.get("GYAVE_DEFAULT_CWD", os.getcwd())
 
 app = FastAPI(title="GYAVE Voice Console")
 
@@ -283,27 +284,17 @@ async def ws_endpoint(websocket: WebSocket):
                 cfg.volume = volume
             # The Voice Console is an active conversation, not passive hook
             # narration — talkback-win's ~800-char "skip long analytical
-            # output" heuristic (kept as-is for hooks) was silently
-            # swallowing normal-length replies here with zero feedback in
-            # the UI (bug found 2026-08-26: a 1350-char reply was logged
-            # as "skip: too long" but the console just stayed silent).
-            # Console replies get a much higher ceiling, configurable via
-            # GYAVE_CONSOLE_MAX_CHARS; bullets/code-fence/tool-output
-            # checks still apply since those genuinely don't speak well
-            # regardless of context.
+            # output" heuristic was silently swallowing normal-length
+            # replies here with zero feedback in the UI (bug found
+            # 2026-08-26: a 1350-char reply was logged as "skip: too
+            # long" but the console just stayed silent). Global defaults
+            # were raised to 15000 chars / 12 bullets (config.py) so every
+            # hook (Claude/Copilot/Gemini) and the Console behave the same
+            # way; these env vars remain as an optional per-surface
+            # override on top of that shared default.
             import os as _os
-            cfg.max_chars = int(_os.environ.get("GYAVE_CONSOLE_MAX_CHARS", "6000"))
-            # Same reasoning as max_chars above: talkback-win's "3+ bullets"
-            # / "40% code fences" heuristics were tuned for passive hook
-            # narration of arbitrary agent output, not an active back-and-
-            # forth conversation where the user is looking at the mascot
-            # and expects *some* audio for every reply. A short numbered
-            # self-introduction (e.g. "1. Scout 2. Strategist...") was
-            # being silently vetoed by max_bullets=3 even though it reads
-            # fine aloud. Console gets a much higher bullet ceiling;
-            # max_code_fence_ratio stays tight since a code dump genuinely
-            # doesn't speak well regardless of context.
-            cfg.max_bullets = int(_os.environ.get("GYAVE_CONSOLE_MAX_BULLETS", "12"))
+            cfg.max_chars = int(_os.environ.get("GYAVE_CONSOLE_MAX_CHARS", str(cfg.max_chars)))
+            cfg.max_bullets = int(_os.environ.get("GYAVE_CONSOLE_MAX_BULLETS", str(cfg.max_bullets)))
             spoken, skip_reason = await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
             if not spoken and not mute:
                 await websocket.send_json({
