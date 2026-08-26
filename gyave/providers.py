@@ -569,7 +569,12 @@ def list_fishaudio_voices(locale_prefix: str | None = None) -> list[dict]:
     static fallback of pre-made voices.
     """
     fallback = [
-        {"short_name": "bdb4986093f8403d8dad0858c0628aa1", "gender": "Male", "locale": "pt-BR", "friendly_name": "Lao / Rick & Morty (Fish Audio)"},
+        {"short_name": "bdb4986093f8403d8dad0858c0628aa1", "gender": "Male", "locale": "pt-BR", "friendly_name": "Rick & Morty (Fish Audio)"},
+        {"short_name": "5160b0e8ca854d7e94403b2500ee582b", "gender": "Male", "locale": "pt-BR", "friendly_name": "Pica Pau (Fish Audio)"},
+        {"short_name": "03715d7c27cc4c95849ef3957c9ef46c", "gender": "Male", "locale": "pt-BR", "friendly_name": "Mordecai (Fish Audio)"},
+        {"short_name": "7d172aacf0154382a7cf02f6a540878d", "gender": "Male", "locale": "pt-BR", "friendly_name": "William Bonner (Fish Audio)"},
+        {"short_name": "a5b93aeddcc948c19ea04f0afe9d178c", "gender": "Male", "locale": "pt-BR", "friendly_name": "Jarvis (Fish Audio)"},
+        {"short_name": "1a975db6f1be40f4bed2bcc5e495301d", "gender": "Male", "locale": "pt-BR", "friendly_name": "Mentalista (Fish Audio)"},
         {"short_name": "9a9cf47702da476aa4629e2506d4a857", "gender": "Male", "locale": "en-US", "friendly_name": "Default (Fish Audio)"},
     ]
     try:

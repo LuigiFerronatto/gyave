@@ -8,3 +8,5 @@ config.json
 *.wav
 *.mp3
 .env
+aliases.json
+.engine_health.json

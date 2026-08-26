@@ -40,7 +40,7 @@ class GyaveTUI(App):
 
     #left_panel {
         width: 38;
-        border-right: thin #3b3f4c;
+        border-right: solid #3b3f4c;
         padding: 1 2;
         background: #15171e;
     }
@@ -66,7 +66,7 @@ class GyaveTUI(App):
 
     #chat_log {
         height: 1fr;
-        border: thin #3b3f4c;
+        border: round #3b3f4c;
         background: #111216;
         padding: 1;
         margin-bottom: 1;
@@ -74,13 +74,13 @@ class GyaveTUI(App):
 
     #message_input {
         dock: bottom;
-        border: thin #3b3f4c;
+        border: round #3b3f4c;
         background: #15171e;
     }
 
     #logs_log {
         height: 8;
-        border: thin #282a36;
+        border: solid #282a36;
         background: #0b0c10;
         color: #6272a4;
         margin-top: 1;
@@ -156,7 +156,7 @@ class GyaveTUI(App):
                 start_new_session=True # starts in new process group to protect from SIGINT
             )
             await asyncio.sleep(2.0)
-            self.logs_log.write("[bold green][TUI][/bold yellow] Backend iniciado.")
+            self.logs_log.write("[bold green][TUI][/bold green] Backend iniciado.")
 
     async def load_providers(self) -> None:
         try:

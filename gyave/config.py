@@ -116,3 +116,47 @@ def save_setting(key: str, value: str) -> None:
     j[key] = value
     GYAVE_HOME.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(j, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+ALIASES_FILE = GYAVE_HOME / "aliases.json"
+
+BUILTIN_ALIASES = {
+    "lao": {"id": "bdb4986093f8403d8dad0858c0628aa1", "provider": "fishaudio", "friendly_name": "Lao / Rick & Morty"},
+    "picapau": {"id": "5160b0e8ca854d7e94403b2500ee582b", "provider": "fishaudio", "friendly_name": "Pica Pau"},
+    "mordecai": {"id": "03715d7c27cc4c95849ef3957c9ef46c", "provider": "fishaudio", "friendly_name": "Mordecai"},
+    "bonner": {"id": "7d172aacf0154382a7cf02f6a540878d", "provider": "fishaudio", "friendly_name": "William Bonner"},
+    "jarvis": {"id": "a5b93aeddcc948c19ea04f0afe9d178c", "provider": "fishaudio", "friendly_name": "Jarvis"},
+    "mentalista": {"id": "1a975db6f1be40f4bed2bcc5e495301d", "provider": "fishaudio", "friendly_name": "Mentalista"},
+}
+
+
+def load_aliases() -> dict:
+    aliases = BUILTIN_ALIASES.copy()
+    if ALIASES_FILE.exists():
+        try:
+            custom = json.loads(ALIASES_FILE.read_text(encoding="utf-8"))
+            aliases.update(custom)
+        except Exception:
+            pass
+    return aliases
+
+
+def get_alias(name: str) -> dict | None:
+    return load_aliases().get(name.lower().strip())
+
+
+def save_alias(name: str, voice_id: str, provider: str, friendly_name: str = "") -> None:
+    name = name.lower().strip()
+    custom = {}
+    if ALIASES_FILE.exists():
+        try:
+            custom = json.loads(ALIASES_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    custom[name] = {
+        "id": voice_id,
+        "provider": provider,
+        "friendly_name": friendly_name or name.capitalize(),
+    }
+    GYAVE_HOME.mkdir(parents=True, exist_ok=True)
+    ALIASES_FILE.write_text(json.dumps(custom, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -176,13 +176,40 @@ def _cmd_provider(argv: list[str]) -> int:
 
 
 def _cmd_voice(argv: list[str]) -> int:
+    from gyave.config import get_alias, save_alias
     if not argv:
         cfg = Config.load()
         print(f"Voz atual: {cfg.voice}")
-        print("Uso: gyave voice <nome> (ex: pt-BR-FranciscaNeural)")
+        print("\nUso:")
+        print("  gyave voice <nome_ou_alias>                 # Definir a voz padrão")
+        print("  gyave voice add <alias> <id> <provider> [n] # Registrar novo alias de voz")
         return 0
-    save_setting("voice", argv[0])
-    print(f"Voz padrão agora é: {argv[0]}")
+
+    if argv[0] == "add":
+        if len(argv) < 4:
+            print("Erro: parâmetros insuficientes.")
+            print("Uso: gyave voice add <alias> <id_da_voz> <nome_do_provider> [nome_amigável]")
+            return 1
+        alias = argv[1]
+        voice_id = argv[2]
+        provider = argv[3]
+        friendly = " ".join(argv[4:]) if len(argv) > 4 else ""
+        save_alias(alias, voice_id, provider, friendly)
+        print(f"✅ Alias de voz '{alias}' adicionado com sucesso à sua biblioteca!")
+        return 0
+
+    name = argv[0]
+    alias_info = get_alias(name)
+    if alias_info:
+        save_setting("voice", alias_info["id"])
+        save_setting("engine", alias_info["provider"])
+        print(f"🎯 Alias '{name}' encontrado na biblioteca!")
+        print(f"➡️ Provider alterado automaticamente para: {alias_info['provider']}")
+        print(f"🔊 Voz padrão configurada como: {alias_info['friendly_name']} ({alias_info['id']})")
+        return 0
+
+    save_setting("voice", name)
+    print(f"Voz padrão agora é: {name}")
     return 0
 
 
@@ -198,20 +225,40 @@ def _cmd_model(argv: list[str]) -> int:
 
 
 def _cmd_voices(argv: list[str]) -> int:
-    """List real available edge-tts voices (same data source as the
-    `edge-tts --list-voices` CLI command from rany2/edge-tts), optionally
-    filtered by locale prefix, e.g. `gyave voices pt-`.
-    """
-    from gyave.providers import list_edge_voices
-    prefix = argv[0] if argv else None
-    voices = list_edge_voices(prefix)
-    if not voices:
-        print("Nenhuma voz encontrada (sem rede, ou edge-tts não instalado).")
+    from gyave.config import load_aliases
+    if not argv:
+        print("=== Biblioteca de Vozes (Aliases) ===")
+        aliases = load_aliases()
+        print(f"{'ALIAS':<15} | {'NOME AMIGÁVEL':<30} | {'PROVIDER':<12} | {'VOICE ID'}")
+        print("-" * 80)
+        for name, info in sorted(aliases.items()):
+            print(f"{name:<15} | {info['friendly_name']:<30} | {info['provider']:<12} | {info['id']}")
+        print("\nPara listar vozes online/completas de um provedor, digite:")
+        print("  gyave voices edge         # Listar vozes do Microsoft Edge")
+        print("  gyave voices fishaudio    # Listar vozes do Fish Audio")
+        return 0
+
+    provider = argv[0]
+    if provider == "edge":
+        from gyave.providers import list_edge_voices
+        voices = list_edge_voices()
+        if not voices:
+            print("Nenhuma voz encontrada (sem rede, ou edge-tts não instalado).")
+            return 1
+        for v in voices:
+            print(f"{v['short_name']:<32} {v['gender']:<8} {v['locale']}")
+        print(f"\n{len(voices)} vozes do Edge.")
+        return 0
+    elif provider == "fishaudio":
+        from gyave.providers import list_fishaudio_voices
+        voices = list_fishaudio_voices()
+        for v in voices:
+            print(f"{v['short_name']:<35} | {v['friendly_name']}")
+        print(f"\n{len(voices)} vozes do Fish Audio.")
+        return 0
+    else:
+        print(f"Provider desconhecido: {provider}. Escolha 'edge' ou 'fishaudio' para listagem online.")
         return 1
-    for v in voices:
-        print(f"{v['short_name']:<32} {v['gender']:<8} {v['locale']}")
-    print(f"\n{len(voices)} vozes.")
-    return 0
 
 
 def _cmd_rate(argv: list[str]) -> int:
