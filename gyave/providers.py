@@ -353,7 +353,7 @@ def speak_fishaudio(text: str, cfg: Config, play_fn=None) -> bool:
     import concurrent.futures
 
     # Default to s2-pro or use configured model
-    voice = os.environ.get("GYAVE_FISHAUDIO_VOICE", "9a9cf47702da476aa4629e2506d4a857")
+    voice = os.environ.get("GYAVE_FISHAUDIO_VOICE", "bdb4986093f8403d8dad0858c0628aa1")
     model = os.environ.get("GYAVE_FISHAUDIO_MODEL") or (cfg.model if cfg.model != "auto" else "s2.1-pro")
 
     try:
@@ -569,6 +569,7 @@ def list_fishaudio_voices(locale_prefix: str | None = None) -> list[dict]:
     static fallback of pre-made voices.
     """
     fallback = [
+        {"short_name": "bdb4986093f8403d8dad0858c0628aa1", "gender": "Male", "locale": "pt-BR", "friendly_name": "Lao / Rick & Morty (Fish Audio)"},
         {"short_name": "9a9cf47702da476aa4629e2506d4a857", "gender": "Male", "locale": "en-US", "friendly_name": "Default (Fish Audio)"},
     ]
     try:

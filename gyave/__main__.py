@@ -10,6 +10,7 @@ Usage:
   gyave mute / gyave unmute              # toggle the session-wide mute flag
   gyave stop                             # stop active audio playback immediately
   gyave ui [--port=8765] [--no-browser]  # launch the Voice Console (web UI)
+  gyave tui                              # launch the premium Terminal User Interface (TUI)
   gyave status                           # show current engine/voice/rate/mute
   gyave provider <name>                  # switch default TTS provider (persists)
   gyave voice <name>                     # switch default voice (persists)
@@ -125,6 +126,19 @@ def _cmd_ui(argv: list[str]) -> int:
             port = int(a.split("=", 1)[1])
     print(f"[gyave] Voice Console em http://127.0.0.1:{port}  (ctrl+c para sair)")
     ui_server.run(port=port, open_browser=not no_browser)
+    return 0
+
+
+def _cmd_tui(argv: list[str]) -> int:
+    try:
+        from gyave.tui import GyaveTUI
+    except ImportError:
+        print("[gyave] Textual TUI não está instalado ou falhou ao importar.")
+        print("Instale usando: pip install 'gyave[tui]' ou pip install textual")
+        return 1
+    
+    app = GyaveTUI()
+    app.run()
     return 0
 
 
@@ -368,6 +382,7 @@ COMMANDS = {
     "unmute": _cmd_unmute,
     "stop": _cmd_stop,
     "ui": _cmd_ui,
+    "tui": _cmd_tui,
     "status": _cmd_status,
     "provider": _cmd_provider,
     "voice": _cmd_voice,

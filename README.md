@@ -180,7 +180,8 @@ gyave/
 ├── adapters.py    # per-CLI transcript parsers (the ONLY CLI-specific code)
 ├── core.py        # orchestration — never raises, fails open
 ├── ui_server.py    # FastAPI backend for the Voice Console
-└── __main__.py    # `gyave speak|hook|test|mute|unmute|stop|ui`
+├── tui.py         # Premium Terminal User Interface (TUI)
+└── __main__.py    # `gyave speak|hook|test|mute|unmute|stop|ui|tui`
 ```
 
 Adding a new CLI only ever touches **one file** on each integration path:
@@ -224,12 +225,15 @@ shell):
 gyave status              # current engine/voice/rate/volume/pitch/mute
 gyave provider openai     # switch + persist default TTS provider
 gyave voice pt-BR-FranciscaNeural
+gyave model eleven_v3     # switch + persist default TTS model (OpenAI/ElevenLabs/FishAudio)
 gyave voices pt-          # list REAL available edge-tts voices for a locale
 gyave rate +15%
 gyave volume -10%
 gyave pitch +5Hz
 gyave mute / unmute       # toggle global mute (persists)
 gyave stop                # stop active audio playback immediately without muting
+gyave ui                  # launch the Voice Console Web UI
+gyave tui                 # launch the beautiful, interactive Terminal User Interface (TUI)
 gyave doctor              # diagnose a broken install (deps, player, creds)
 ```
 
