@@ -171,7 +171,7 @@ def speak_openai(text: str, cfg: Config, play_fn=None) -> bool:
     import concurrent.futures
 
     voice = os.environ.get("GYAVE_OPENAI_VOICE", "coral")
-    model = os.environ.get("GYAVE_OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+    model = os.environ.get("GYAVE_OPENAI_TTS_MODEL") or (cfg.model if cfg.model != "auto" else "gpt-4o-mini-tts")
     fmt = os.environ.get("GYAVE_OPENAI_TTS_FORMAT", "wav")
     instructions = os.environ.get("GYAVE_OPENAI_TTS_INSTRUCTIONS", "")
 
@@ -286,7 +286,7 @@ def speak_elevenlabs(text: str, cfg: Config, play_fn=None) -> bool:
     import concurrent.futures
 
     voice = os.environ.get("GYAVE_ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")
-    model = os.environ.get("GYAVE_ELEVENLABS_MODEL", "eleven_multilingual_v2")
+    model = os.environ.get("GYAVE_ELEVENLABS_MODEL") or (cfg.model if cfg.model != "auto" else "eleven_multilingual_v2")
 
     try:
         client = ElevenLabs(api_key=api_key)
@@ -302,6 +302,75 @@ def speak_elevenlabs(text: str, cfg: Config, play_fn=None) -> bool:
                 text=chunk,
                 model_id=model,
                 output_format="mp3_44100_128",
+            )
+            with out_path.open("wb") as f:
+                for b_chunk in response:
+                    if b_chunk:
+                        f.write(b_chunk)
+            if out_path.exists() and out_path.stat().st_size > 0:
+                return out_path
+        except Exception:
+            pass
+        out_path.unlink(missing_ok=True)
+        return None
+
+    chunks = split_sentences(text)
+    if not chunks:
+        return False
+
+    any_played = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        next_future = pool.submit(_synthesize_sync, chunks[0])
+        for i, _chunk in enumerate(chunks):
+            if MUTE_FLAG_FILE.exists():
+                break
+            out_path = next_future.result()
+            if i + 1 < len(chunks):
+                next_future = pool.submit(_synthesize_sync, chunks[i + 1])
+            if out_path is not None:
+                try:
+                    actual_play = play_fn or _play_file
+                    if actual_play(out_path):
+                        any_played = True
+                except Exception:
+                    pass
+                finally:
+                    out_path.unlink(missing_ok=True)
+    return any_played
+
+
+def speak_fishaudio(text: str, cfg: Config, play_fn=None) -> bool:
+    """Fish Audio TTS — paid, requires `FISH_API_KEY`."""
+    try:
+        from fishaudio import FishAudio
+    except ImportError:
+        return False
+    import os
+    api_key = os.environ.get("FISH_API_KEY")
+    if not api_key:
+        return False
+
+    import concurrent.futures
+
+    # Default to s2-pro or use configured model
+    voice = os.environ.get("GYAVE_FISHAUDIO_VOICE", "9a9cf47702da476aa4629e2506d4a857")
+    model = os.environ.get("GYAVE_FISHAUDIO_MODEL") or (cfg.model if cfg.model != "auto" else "s2.1-pro")
+
+    try:
+        client = FishAudio(api_key=api_key)
+    except Exception:
+        return False
+
+    def _synthesize_sync(chunk: str) -> Path | None:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            out_path = Path(tmp.name)
+        try:
+            # We use client.tts.stream to stream the bytes
+            response = client.tts.stream(
+                text=chunk,
+                reference_id=voice,
+                model=model,
+                format="mp3"
             )
             with out_path.open("wb") as f:
                 for b_chunk in response:
@@ -495,12 +564,42 @@ def list_elevenlabs_voices(locale_prefix: str | None = None) -> list[dict]:
         return fallback
 
 
+def list_fishaudio_voices(locale_prefix: str | None = None) -> list[dict]:
+    """List real available Fish Audio voices via the SDK. Fails open to a
+    static fallback of pre-made voices.
+    """
+    fallback = [
+        {"short_name": "9a9cf47702da476aa4629e2506d4a857", "gender": "Male", "locale": "en-US", "friendly_name": "Default (Fish Audio)"},
+    ]
+    try:
+        from fishaudio import FishAudio
+        import os
+        api_key = os.environ.get("FISH_API_KEY")
+        if not api_key:
+            return fallback
+        client = FishAudio(api_key=api_key)
+        resp = client.voices.list(page_size=50)
+        out = []
+        for v in getattr(resp, "items", []):
+            locale = v.languages[0] if getattr(v, "languages", None) else ""
+            out.append({
+                "short_name": v.id,
+                "gender": "",
+                "locale": locale,
+                "friendly_name": f"{v.title} (Fish Audio)",
+            })
+        return out or fallback
+    except Exception:
+        return fallback
+
+
 PROVIDERS = {
     "edge": speak_edge,
     "espeak": speak_espeak,
     "openai": speak_openai,
     "polly": speak_polly,
     "elevenlabs": speak_elevenlabs,
+    "fishaudio": speak_fishaudio,
     "silent": speak_silent,
 }
 

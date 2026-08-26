@@ -69,6 +69,7 @@ def _get(key: str, default: str, json_cfg: dict) -> str:
 class Config:
     engine: str = "edge"          # edge | espeak | openai | polly | silent | auto
     voice: str = "pt-BR-AntonioNeural"
+    model: str = "auto"           # generic model setting, e.g. "eleven_v3"
     rate: str = "+0%"             # edge-tts rate adjustment, e.g. "+15%"
     volume: str = "+0%"           # edge-tts volume adjustment, e.g. "-20%" (from edge-tts README)
     pitch: str = "+0Hz"           # edge-tts pitch adjustment, e.g. "-10Hz" (from edge-tts README)
@@ -88,6 +89,7 @@ class Config:
         return cls(
             engine=_get("engine", "edge", j),
             voice=_get("voice", "pt-BR-AntonioNeural", j),
+            model=_get("model", "auto", j),
             rate=_get("rate", "+0%", j),
             volume=_get("volume", "+0%", j),
             pitch=_get("pitch", "+0Hz", j),

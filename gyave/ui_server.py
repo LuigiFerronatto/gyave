@@ -90,7 +90,7 @@ def api_voices(provider: str = "edge"):
     vs. espeak's bare language codes), so the picker must refresh whenever
     the provider changes instead of always showing the fixed edge-tts list.
     """
-    from gyave.providers import list_edge_voices, list_openai_voices, list_polly_voices, list_espeak_voices, list_elevenlabs_voices
+    from gyave.providers import list_edge_voices, list_openai_voices, list_polly_voices, list_espeak_voices, list_elevenlabs_voices, list_fishaudio_voices
 
     if provider == "edge":
         voices = list_edge_voices("pt-") + list_edge_voices("en-")
@@ -109,10 +109,41 @@ def api_voices(provider: str = "edge"):
         voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_espeak_voices()]
     elif provider == "elevenlabs":
         voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_elevenlabs_voices()]
+    elif provider == "fishaudio":
+        voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_fishaudio_voices()]
     else:  # silent — no real voice concept
         voices = [{"id": "silent", "label": "N/A (modo silencioso)"}]
 
     return {"voices": voices}
+
+
+@app.get("/api/models")
+def api_models(provider: str = "edge"):
+    """List available TTS models for providers that support multiple models
+    (specifically OpenAI, ElevenLabs, and Fish Audio).
+    """
+    if provider == "elevenlabs":
+        models = [
+            {"id": "eleven_multilingual_v2", "label": "Multilingual v2 (Recomendado)"},
+            {"id": "eleven_flash_v2_5", "label": "Flash v2.5 (Baixa Latência)"},
+            {"id": "eleven_v3", "label": "Eleven v3 (Qualidade Máxima)"},
+        ]
+    elif provider == "openai":
+        models = [
+            {"id": "gpt-4o-mini-tts", "label": "gpt-4o-mini-tts (Recomendado)"},
+            {"id": "tts-1", "label": "tts-1"},
+            {"id": "tts-1-hd", "label": "tts-1-hd (Alta Definição)"},
+        ]
+    elif provider == "fishaudio":
+        models = [
+            {"id": "s2.1-pro", "label": "s2.1-pro (Recomendado)"},
+            {"id": "s2-pro", "label": "s2-pro"},
+            {"id": "s1", "label": "s1 (Legado)"},
+            {"id": "s2.1-pro-free", "label": "s2.1-pro-free (Desenvolvimento)"},
+        ]
+    else:
+        models = [{"id": "auto", "label": "Auto / Padrão"}]
+    return {"models": models}
 
 
 @app.get("/api/tts-providers")
@@ -146,6 +177,12 @@ def api_tts_providers():
             except ImportError:
                 return False
             return bool(_os.environ.get("ELEVENLABS_API_KEY"))
+        if name == "fishaudio":
+            try:
+                import fishaudio  # noqa: F401
+            except ImportError:
+                return False
+            return bool(_os.environ.get("FISH_API_KEY"))
         return True
 
     labels = {
@@ -153,6 +190,7 @@ def api_tts_providers():
         "openai": "OpenAI TTS (pago)",
         "polly": "AWS Polly (pago)",
         "elevenlabs": "ElevenLabs (pago, streaming)",
+        "fishaudio": "Fish Audio (pago, streaming)",
         "espeak": "eSpeak (offline, robótico)",
         "silent": "Silencioso (log apenas)",
     }
@@ -407,6 +445,7 @@ async def ws_endpoint(websocket: WebSocket):
             engine = msg.get("engine") or "auto"
             voice = msg.get("voice") or "pt-BR-AntonioNeural"
             tts_provider = msg.get("tts_provider") or "edge"
+            tts_model = msg.get("tts_model") or "auto"
             rate = msg.get("rate")
             volume = msg.get("volume")
             mute = bool(msg.get("mute"))
@@ -438,6 +477,7 @@ async def ws_endpoint(websocket: WebSocket):
             cfg.voice = voice
             cfg.mute = mute
             cfg.engine = tts_provider
+            cfg.model = tts_model
             if rate:
                 cfg.rate = rate
             if volume:

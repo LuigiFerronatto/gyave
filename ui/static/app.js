@@ -3,6 +3,7 @@ const stateLabel = document.getElementById("stateLabel");
 const log = document.getElementById("log");
 const engineSelect = document.getElementById("engineSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const modelSelect = document.getElementById("modelSelect");
 const ttsProviderSelect = document.getElementById("ttsProviderSelect");
 const sttModeSelect = document.getElementById("sttModeSelect");
 const audioOutputSelect = document.getElementById("audioOutputSelect");
@@ -183,6 +184,19 @@ async function loadVoices(provider) {
   });
 }
 
+async function loadModels(provider) {
+  const p = provider || (ttsProviderSelect ? ttsProviderSelect.value : "edge") || "edge";
+  const res = await fetch(`/api/models?provider=${encodeURIComponent(p)}`);
+  const data = await res.json();
+  modelSelect.innerHTML = "";
+  (data.models || []).forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.label;
+    modelSelect.appendChild(opt);
+  });
+}
+
 async function loadTtsProviders() {
   const res = await fetch("/api/tts-providers");
   const data = await res.json();
@@ -198,8 +212,12 @@ async function loadTtsProviders() {
 loadEngines();
 (async () => {
   await loadTtsProviders();
-  ttsProviderSelect.addEventListener("change", () => loadVoices(ttsProviderSelect.value));
+  ttsProviderSelect.addEventListener("change", () => {
+    loadVoices(ttsProviderSelect.value);
+    loadModels(ttsProviderSelect.value);
+  });
   await loadVoices(ttsProviderSelect.value);
+  await loadModels(ttsProviderSelect.value);
 })();
 
 function sendMessage(text) {
@@ -212,6 +230,7 @@ function sendMessage(text) {
     engine: engineSelect.value,
     voice: voiceSelect.value,
     tts_provider: ttsProviderSelect.value,
+    tts_model: modelSelect.value,
     rate: fmtPct(rateSlider.value),
     volume: fmtPct(volumeSlider.value),
     mute: muted,

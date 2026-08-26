@@ -13,6 +13,7 @@ Usage:
   gyave status                           # show current engine/voice/rate/mute
   gyave provider <name>                  # switch default TTS provider (persists)
   gyave voice <name>                     # switch default voice (persists)
+  gyave model <name>                     # switch default model (persists)
   gyave voices [locale-prefix]           # list real edge-tts voices (e.g. "pt-")
   gyave rate <+N%|-N%>                   # set edge-tts speech rate (persists)
   gyave volume <+N%|-N%>                 # set edge-tts volume (persists)
@@ -132,6 +133,7 @@ def _cmd_status(_argv: list[str]) -> int:
     cfg = Config.load()
     print(f"engine   : {cfg.engine}")
     print(f"voice    : {cfg.voice}")
+    print(f"model    : {cfg.model}")
     print(f"rate     : {cfg.rate}")
     print(f"volume   : {cfg.volume}")
     print(f"pitch    : {cfg.pitch}")
@@ -167,6 +169,17 @@ def _cmd_voice(argv: list[str]) -> int:
         return 0
     save_setting("voice", argv[0])
     print(f"Voz padrão agora é: {argv[0]}")
+    return 0
+
+
+def _cmd_model(argv: list[str]) -> int:
+    if not argv:
+        cfg = Config.load()
+        print(f"Modelo atual: {cfg.model}")
+        print("Uso: gyave model <nome_do_modelo> (ex: eleven_multilingual_v2 ou gpt-4o-mini-tts)")
+        return 0
+    save_setting("model", argv[0])
+    print(f"Modelo padrão agora é: {argv[0]}")
     return 0
 
 
@@ -245,6 +258,7 @@ def _cmd_doctor(_argv: list[str]) -> int:
     import os
     check("OPENAI_API_KEY definido (opcional)", bool(os.environ.get("OPENAI_API_KEY")))
     check("ELEVENLABS_API_KEY definido (opcional)", bool(os.environ.get("ELEVENLABS_API_KEY")))
+    check("FISH_API_KEY definido (opcional)", bool(os.environ.get("FISH_API_KEY")))
     check("AWS creds configuradas (opcional)", bool(os.environ.get("AWS_ACCESS_KEY_ID") or Path.home().joinpath(".aws/credentials").exists()))
 
     try:
@@ -252,6 +266,12 @@ def _cmd_doctor(_argv: list[str]) -> int:
         check("elevenlabs instalado (opcional)", True)
     except ImportError:
         check("elevenlabs instalado (opcional)", False, "pip install elevenlabs")
+
+    try:
+        import fishaudio  # noqa: F401
+        check("fishaudio instalado (opcional)", True)
+    except ImportError:
+        check("fishaudio instalado (opcional)", False, "pip install fish-audio-sdk")
 
     cfg = Config.load()
     check(f"config carregada (engine={cfg.engine}, voice={cfg.voice})", True)
@@ -351,6 +371,7 @@ COMMANDS = {
     "status": _cmd_status,
     "provider": _cmd_provider,
     "voice": _cmd_voice,
+    "model": _cmd_model,
     "voices": _cmd_voices,
     "rate": _cmd_rate,
     "volume": _cmd_volume,

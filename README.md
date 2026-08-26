@@ -197,7 +197,7 @@ config framework, no YAML to learn:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `GYAVE_ENGINE` | `edge` | `edge` \| `openai` \| `polly` \| `elevenlabs` \| `espeak` \| `auto` \| `silent` |
+| `GYAVE_ENGINE` | `edge` | `edge` \| `openai` \| `polly` \| `elevenlabs` \| `fishaudio` \| `espeak` \| `auto` \| `silent` |
 | `GYAVE_VOICE` | `pt-BR-AntonioNeural` | edge-tts voice ID |
 | `GYAVE_RATE` | `+0%` | edge-tts speech rate adjustment |
 | `GYAVE_VOLUME` | `+0%` | edge-tts volume adjustment (e.g. `-20%`) |
@@ -209,9 +209,12 @@ config framework, no YAML to learn:
 | `GYAVE_POLLY_VOICE` | `Camila` | Used when `GYAVE_ENGINE=polly` |
 | `GYAVE_ELEVENLABS_VOICE` | `JBFqnCBsd6RMkjVDRZzb` | Used when `GYAVE_ENGINE=elevenlabs` |
 | `GYAVE_ELEVENLABS_MODEL` | `eleven_multilingual_v2` | Used when `GYAVE_ENGINE=elevenlabs` |
+| `GYAVE_FISHAUDIO_VOICE` | `9a9cf47702da476aa4629e2506d4a857` | Used when `GYAVE_ENGINE=fishaudio` |
+| `GYAVE_FISHAUDIO_MODEL` | `s2.1-pro` | Used when `GYAVE_ENGINE=fishaudio` |
 | `GYAVE_LAO_REPO` | *(auto-detected)* | Path to a repo exposing `lao_core.engine_router`, for the Voice Console |
 | `OPENAI_API_KEY` | *(none)* | Enables `GYAVE_ENGINE=openai` TTS + OpenAI Whisper STT |
 | `ELEVENLABS_API_KEY` | *(none)* | Enables `GYAVE_ENGINE=elevenlabs` TTS |
+| `FISH_API_KEY` | *(none)* | Enables `GYAVE_ENGINE=fishaudio` TTS |
 
 **Quick CLI commands** (mirroring `claude-voice`'s UX — each persists to
 `~/.gyave/config.json` so you don't need to export the env var every
