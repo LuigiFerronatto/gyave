@@ -48,6 +48,19 @@ def _looks_like_tool_output(text: str) -> bool:
     return hits >= 3
 
 
+def _is_code_heavy(text: str, fence_ratio: float) -> bool:
+    """True only when the reply is a pure code dump, not "explanation with
+    a code example" — a gap explicitly called out as a pain point in
+    Null-Phnix/claude-voice's README ("the heuristic is crude and
+    sometimes skips useful explanations that include code examples").
+    GYAVE's version: also require the prose OUTSIDE the fences to be thin
+    (not just a one-line intro like "Here's the fix:") before vetoing on
+    fence ratio alone.
+    """
+    prose_outside = _CODE_FENCE_RE.sub("", text).strip()
+    return fence_ratio > 0.4 and len(prose_outside) < 60
+
+
 def strip_markdown(text: str) -> str:
     """Best-effort plain-text conversion for TTS (not a full MD parser)."""
     text = _CODE_FENCE_RE.sub(" ", text)
@@ -74,7 +87,8 @@ def evaluate(raw_text: str, cfg: Config) -> Verdict:
     if len(_BULLET_LINE_RE.findall(stripped)) >= cfg.max_bullets:
         return Verdict(False, reason="structured list, better read than heard")
 
-    if _code_fence_ratio(stripped) > cfg.max_code_fence_ratio:
+    fence_ratio = _code_fence_ratio(stripped)
+    if fence_ratio > cfg.max_code_fence_ratio and _is_code_heavy(stripped, fence_ratio):
         return Verdict(False, reason="mostly code")
 
     if _looks_like_tool_output(stripped):

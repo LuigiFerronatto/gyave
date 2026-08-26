@@ -79,6 +79,46 @@ def transcribe_bytes(audio_bytes: bytes, suffix: str = ".webm", language: str = 
         tmp_path.unlink(missing_ok=True)
 
 
+def transcribe_openai(audio_bytes: bytes, suffix: str = ".webm", language: str = "pt") -> Optional[str]:
+    """Cloud STT via OpenAI's Whisper API (`whisper-1`) — same service the
+    VoiceMode MCP server (kumaran srinivasan's article) uses. Requires
+    `OPENAI_API_KEY`. Unlike local faster-whisper, needs no model
+    download/GPU/CPU inference cost on this machine, at the price of a
+    network round-trip + per-minute billing (~$0.006/min per VoiceMode's
+    published figures). Opt-in only — never used unless explicitly
+    selected in the Voice Console's STT picker.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return None
+    if not os.environ.get("OPENAI_API_KEY"):
+        return None
+    try:
+        client = OpenAI()
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = Path(tmp.name)
+        try:
+            with open(tmp_path, "rb") as fh:
+                result = client.audio.transcriptions.create(
+                    model="whisper-1", file=fh, language=language,
+                )
+            return (result.text or "").strip() or None
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    except Exception:
+        return None
+
+
+def openai_available() -> bool:
+    try:
+        import openai  # noqa: F401
+    except ImportError:
+        return False
+    return bool(os.environ.get("OPENAI_API_KEY"))
+
+
 def is_available() -> bool:
     """Cheap check for whether local Whisper STT can even be attempted,
     without paying the full model-load cost. Used by /api/health-style

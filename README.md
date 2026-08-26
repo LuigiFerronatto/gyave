@@ -200,12 +200,41 @@ config framework, no YAML to learn:
 | `GYAVE_ENGINE` | `edge` | `edge` \| `openai` \| `polly` \| `espeak` \| `auto` \| `silent` |
 | `GYAVE_VOICE` | `pt-BR-AntonioNeural` | edge-tts voice ID |
 | `GYAVE_RATE` | `+0%` | edge-tts speech rate adjustment |
+| `GYAVE_VOLUME` | `+0%` | edge-tts volume adjustment (e.g. `-20%`) |
+| `GYAVE_PITCH` | `+0Hz` | edge-tts pitch adjustment (e.g. `-10Hz`) |
 | `GYAVE_MAX_CHARS` | `800` | Skip speaking anything longer |
 | `GYAVE_MAX_BULLETS` | `3` | Skip if 3+ bullet points detected |
 | `GYAVE_MUTE` | `0` | `1` mutes globally for the session |
 | `GYAVE_OPENAI_VOICE` | `alloy` | Used when `GYAVE_ENGINE=openai` |
 | `GYAVE_POLLY_VOICE` | `Camila` | Used when `GYAVE_ENGINE=polly` |
 | `GYAVE_LAO_REPO` | *(auto-detected)* | Path to a repo exposing `lao_core.engine_router`, for the Voice Console |
+| `OPENAI_API_KEY` | *(none)* | Enables `GYAVE_ENGINE=openai` TTS + OpenAI Whisper STT |
+
+**Quick CLI commands** (mirroring `claude-voice`'s UX — each persists to
+`~/.gyave/config.json` so you don't need to export the env var every
+shell):
+
+```bash
+gyave status              # current engine/voice/rate/volume/pitch/mute
+gyave provider openai     # switch + persist default TTS provider
+gyave voice pt-BR-FranciscaNeural
+gyave voices pt-          # list REAL available edge-tts voices for a locale
+gyave rate +15%
+gyave volume -10%
+gyave pitch +5Hz
+gyave doctor              # diagnose a broken install (deps, player, creds)
+```
+
+**`.env` file support**: drop credentials into `~/.gyave/.env` (already
+gitignored, `chmod 600` recommended) instead of exporting them in every
+shell — same pattern as VoiceMode's `~/.voicemode/voicemode.env`:
+
+```
+OPENAI_API_KEY=sk-...
+```
+
+Loaded automatically on every `gyave` invocation and by the Voice Console
+server; real exported env vars still always take precedence.
 
 ---
 

@@ -3,6 +3,7 @@ const stateLabel = document.getElementById("stateLabel");
 const log = document.getElementById("log");
 const engineSelect = document.getElementById("engineSelect");
 const voiceSelect = document.getElementById("voiceSelect");
+const sttModeSelect = document.getElementById("sttModeSelect");
 const muteBtn = document.getElementById("muteBtn");
 const micBtn = document.getElementById("micBtn");
 const textInput = document.getElementById("textInput");
@@ -44,6 +45,8 @@ function connectWs() {
       // already added locally on send; ignore to avoid duplicate bubble
     } else if (msg.type === "assistant_message") {
       addBubble("lao", msg.text, !!msg.error);
+    } else if (msg.type === "tts_skipped") {
+      addBubble("system", `🔇 ${msg.text}`, false);
     }
   };
   ws.onclose = () => setTimeout(connectWs, 1500);
@@ -99,49 +102,105 @@ muteBtn.onclick = () => {
   muteBtn.textContent = muted ? "🔇" : "🔈";
 };
 
-// --- Push-to-talk via the browser's built-in Web Speech API (client-side
-// STT, no server round-trip, no API key). Falls back gracefully to
-// typing-only if the browser doesn't support it (e.g. Firefox).
+// --- STT: three interchangeable capture modes, selected via sttModeSelect
+// ("webspeech" | "local" | "openai"). webspeech uses the browser's built-in
+// SpeechRecognition (zero network round-trip beyond Chrome's own). The
+// other two record audio with MediaRecorder and POST the blob to
+// /api/stt?provider=local|openai (gyave/stt.py — faster-whisper locally,
+// or OpenAI's whisper-1 API), which is what unlocks Firefox support and
+// the offline/no-Web-Speech-API case entirely (see docs/GYAVE.md).
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
 let recording = false;
+let mediaRecorder = null;
+let mediaChunks = [];
 
-if (SpeechRecognition) {
-  recognizer = new SpeechRecognition();
-  recognizer.lang = "pt-BR";
-  recognizer.interimResults = true;
-  recognizer.continuous = false;
+function currentSttMode() {
+  return sttModeSelect ? sttModeSelect.value : "webspeech";
+}
 
-  recognizer.onresult = (event) => {
+function setupWebSpeech() {
+  if (!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.lang = "pt-BR";
+  r.interimResults = true;
+  r.continuous = false;
+  r.onresult = (event) => {
     let finalText = "";
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
       else textInput.value = event.results[i][0].transcript;
     }
-    if (finalText) {
-      sendMessage(finalText);
-    }
+    if (finalText) sendMessage(finalText);
   };
-  recognizer.onend = () => {
-    recording = false;
-    micBtn.classList.remove("recording");
-  };
-  recognizer.onerror = () => {
-    recording = false;
-    micBtn.classList.remove("recording");
-  };
+  r.onend = () => { recording = false; micBtn.classList.remove("recording"); setMascotState("idle"); };
+  r.onerror = () => { recording = false; micBtn.classList.remove("recording"); setMascotState("idle"); };
+  return r;
+}
+recognizer = setupWebSpeech();
 
-  micBtn.onclick = () => {
-    if (recording) {
-      recognizer.stop();
+async function startMediaRecorderCapture(provider) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) mediaChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setMascotState("thinking");
+      const blob = new Blob(mediaChunks, { type: "audio/webm" });
+      const form = new FormData();
+      form.append("file", blob, "clip.webm");
+      form.append("provider", provider);
+      try {
+        const res = await fetch("/api/stt", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.text) {
+          sendMessage(data.text);
+        } else {
+          addBubble("system", `🔇 Não consegui transcrever (${data.error || "sem áudio reconhecido"}).`, false);
+          setMascotState("idle");
+        }
+      } catch (err) {
+        addBubble("system", `🔇 Falha ao transcrever: ${err}`, false);
+        setMascotState("idle");
+      }
+    };
+    mediaRecorder.start();
+    recording = true;
+    micBtn.classList.add("recording");
+    setMascotState("listening");
+  } catch (err) {
+    addBubble("system", `🔇 Não consegui acessar o microfone: ${err}`, false);
+  }
+}
+
+function stopMediaRecorderCapture() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+  }
+  recording = false;
+  micBtn.classList.remove("recording");
+}
+
+micBtn.onclick = () => {
+  const mode = currentSttMode();
+  if (mode === "webspeech") {
+    if (!recognizer) {
+      alert("Seu navegador não suporta Web Speech API. Escolha 'Whisper local' ou 'Whisper OpenAI' no seletor de captura, ou digite a mensagem.");
       return;
     }
+    if (recording) { recognizer.stop(); return; }
     recording = true;
     micBtn.classList.add("recording");
     setMascotState("listening");
     recognizer.start();
-  };
-} else {
-  micBtn.title = "Reconhecimento de voz não suportado neste navegador — use Chrome/Edge, ou digite.";
-  micBtn.onclick = () => alert("Seu navegador não suporta reconhecimento de voz (Web Speech API). Use Chrome ou Edge, ou digite a mensagem.");
-}
+    return;
+  }
+  // local | openai — MediaRecorder-based capture, click to start, click again to stop
+  if (recording) {
+    stopMediaRecorderCapture();
+  } else {
+    startMediaRecorderCapture(mode);
+  }
+};

@@ -79,7 +79,11 @@ def speak_edge(text: str, cfg: Config) -> bool:
 
     async def _synthesize(chunk: str, out_path: Path) -> bool:
         try:
-            communicate = edge_tts.Communicate(chunk, cfg.voice, rate=cfg.rate)
+            communicate = edge_tts.Communicate(
+                chunk, cfg.voice, rate=cfg.rate,
+                volume=getattr(cfg, "volume", "+0%"),
+                pitch=getattr(cfg, "pitch", "+0Hz"),
+            )
             await communicate.save(str(out_path))
             return out_path.exists() and out_path.stat().st_size > 0
         except Exception:
@@ -226,6 +230,42 @@ def speak_silent(text: str, cfg: Config) -> bool:
     """
     print(f"[gyave:silent] would speak: {text}", file=sys.stderr)
     return True
+
+
+def list_edge_voices(locale_prefix: str | None = None) -> list[dict]:
+    """List real available edge-tts voices via the library's own
+    `list_voices()` API (same data source as the `edge-tts --list-voices`
+    CLI command documented in rany2/edge-tts's README). Returns a list of
+    {"name", "short_name", "gender", "locale"} dicts, optionally filtered
+    to a locale prefix (e.g. "pt-" or "en-"). Fails open to [] if edge_tts
+    isn't installed or the network call fails (e.g. offline).
+    """
+    try:
+        import asyncio
+        import edge_tts
+    except ImportError:
+        return []
+
+    async def _fetch():
+        return await edge_tts.list_voices()
+
+    try:
+        raw = asyncio.run(_fetch())
+    except Exception:
+        return []
+
+    out = []
+    for v in raw:
+        locale = v.get("Locale", "")
+        if locale_prefix and not locale.startswith(locale_prefix):
+            continue
+        out.append({
+            "short_name": v.get("ShortName", ""),
+            "gender": v.get("Gender", ""),
+            "locale": locale,
+            "friendly_name": (v.get("FriendlyName") or v.get("ShortName", "")),
+        })
+    return out
 
 
 PROVIDERS = {

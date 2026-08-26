@@ -119,6 +119,14 @@ body {
   border-bottom-left-radius: 2px;
 }
 .bubble.lao.error { border-color: #7a3a3a; background: #2a1c1c; }
+.bubble.system {
+  align-self: center;
+  font-size: 0.85em;
+  color: #b0a06a;
+  background: #2a271c;
+  border: 1px solid #6a5f3a;
+  font-style: italic;
+}
 
 .composer {
   display: flex;

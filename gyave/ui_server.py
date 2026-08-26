@@ -20,7 +20,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -87,20 +87,31 @@ def api_voices():
 
 
 @app.post("/api/stt")
-async def api_stt(file: UploadFile = File(...), language: str = "pt"):
-    """Server-side STT fallback via local Whisper (faster-whisper) —
-    complements the browser-native Web Speech API push-to-talk path for
-    browsers without SpeechRecognition (e.g. Firefox) or for
-    privacy-sensitive sessions that shouldn't rely on a Chromium build's
-    cloud STT round-trip. Added after auditing
-    ricardotrevisan/ai-voice-agent's local Whisper transcribe endpoint.
-    Returns {"text": null} (not an error) if faster-whisper isn't
-    installed - callers should fall back to typed input either way.
+async def api_stt(file: UploadFile = File(...), language: str = Form("pt"), provider: str = Form("local")):
+    """Server-side STT — complements the browser-native Web Speech API
+    push-to-talk path for browsers without SpeechRecognition (e.g.
+    Firefox), for low-quality mic captures where Web Speech mis-hears, or
+    for privacy-sensitive sessions. Two providers, both opt-in:
+
+    - `provider=local` (default): faster-whisper, fully offline once the
+      model is cached. Added after auditing ricardotrevisan/ai-voice-agent.
+    - `provider=openai`: OpenAI's hosted Whisper API (`whisper-1`), same
+      service used by the VoiceMode MCP server (kumaran srinivasan's
+      article) — needs `OPENAI_API_KEY`, costs ~$0.006/min, but skips the
+      local model download/inference cost entirely.
+
+    Returns {"text": null} (not an HTTP error) if the requested provider
+    isn't available - callers should fall back to typed input either way.
     """
     audio_bytes = await file.read()
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
-    text = stt.transcribe_bytes(audio_bytes, suffix=suffix, language=language)
-    return {"text": text, "whisper_available": stt.is_available()}
+    if provider == "openai":
+        text = stt.transcribe_openai(audio_bytes, suffix=suffix, language=language)
+        err = None if text else "OpenAI Whisper indisponível (defina OPENAI_API_KEY) ou áudio não reconhecido"
+    else:
+        text = stt.transcribe_bytes(audio_bytes, suffix=suffix, language=language)
+        err = None if text else "Whisper local indisponível (pip install faster-whisper) ou áudio não reconhecido"
+    return {"text": text, "provider": provider, "error": err}
 
 
 @app.get("/api/health")
@@ -118,6 +129,7 @@ def api_health():
             if engine_router is not None else 0
         ),
         "whisper_stt_available": stt.is_available(),
+        "openai_stt_available": stt.openai_available(),
     }
 
 
@@ -194,7 +206,24 @@ async def ws_endpoint(websocket: WebSocket):
             cfg = Config.load()
             cfg.voice = voice
             cfg.mute = mute
-            await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
+            # The Voice Console is an active conversation, not passive hook
+            # narration — talkback-win's ~800-char "skip long analytical
+            # output" heuristic (kept as-is for hooks) was silently
+            # swallowing normal-length replies here with zero feedback in
+            # the UI (bug found 2026-08-26: a 1350-char reply was logged
+            # as "skip: too long" but the console just stayed silent).
+            # Console replies get a much higher ceiling, configurable via
+            # GYAVE_CONSOLE_MAX_CHARS; bullets/code-fence/tool-output
+            # checks still apply since those genuinely don't speak well
+            # regardless of context.
+            import os as _os
+            cfg.max_chars = int(_os.environ.get("GYAVE_CONSOLE_MAX_CHARS", "6000"))
+            spoken = await loop.run_in_executor(None, core.speak_text, reply_text, cfg)
+            if not spoken and not mute:
+                await websocket.send_json({
+                    "type": "tts_skipped",
+                    "text": "Áudio não tocado (resposta muito estruturada/longa para falar, ou provedor de voz indisponível).",
+                })
 
             await websocket.send_json({"type": "state", "value": "idle"})
     except WebSocketDisconnect:

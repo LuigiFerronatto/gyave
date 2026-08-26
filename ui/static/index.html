@@ -19,6 +19,13 @@
         <label>Voz:
           <select id="voiceSelect"></select>
         </label>
+        <label>Captura:
+          <select id="sttModeSelect">
+            <option value="webspeech">Navegador (Web Speech, rápido)</option>
+            <option value="local">Whisper local (melhor precisão)</option>
+            <option value="openai">Whisper OpenAI (nuvem)</option>
+          </select>
+        </label>
         <button id="muteBtn" title="Silenciar/ativar voz">🔈</button>
       </div>
     </header>
