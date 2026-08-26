@@ -5,6 +5,7 @@ Usage:
   echo "some text" | gyave speak       # speak text from stdin (plain text)
   <hook payload json> | gyave hook copilot   # Copilot CLI agentStop hook
   <hook payload json> | gyave hook claude    # Claude Code Stop hook
+  <hook payload json> | gyave hook gemini    # Gemini CLI AfterAgent hook
   gyave test                            # play a short confirmation phrase
   gyave mute / gyave unmute              # toggle the session-wide mute flag
   gyave ui [--port=8765] [--no-browser]  # launch the Voice Console (web UI)

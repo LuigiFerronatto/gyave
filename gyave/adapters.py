@@ -69,10 +69,29 @@ def extract_from_claude_transcript(transcript_path: str) -> str | None:
         return _last_matching(fh, lambda d: d.get("type") == "assistant", extract)
 
 
-def resolve_text(hook_kind: str, payload: dict) -> str | None:
-    """hook_kind: 'copilot' | 'claude' | 'auto'. Returns the text to speak,
-    or None if nothing could be resolved (fail open — caller just skips).
+def extract_from_gemini_payload(payload: dict) -> str | None:
+    """Gemini CLI's `AfterAgent` hook (its closest equivalent to Claude
+    Code's `Stop` / Copilot's `agentStop`) hands the final response text
+    directly on stdin as `prompt_response` — no transcript file to read,
+    unlike the other two CLIs. See docs/hooks/reference.md's `AfterAgent`
+    section in the gemini-cli repo.
     """
+    text = payload.get("prompt_response")
+    return text or None
+
+
+def resolve_text(hook_kind: str, payload: dict) -> str | None:
+    """hook_kind: 'copilot' | 'claude' | 'gemini' | 'auto'. Returns the text
+    to speak, or None if nothing could be resolved (fail open — caller
+    just skips).
+    """
+    # Gemini hands the text directly, no transcript file involved — check
+    # this first regardless of transcript_path presence.
+    if hook_kind in ("gemini", "auto"):
+        text = extract_from_gemini_payload(payload)
+        if text:
+            return text
+
     transcript_path = (
         payload.get("transcriptPath")
         or payload.get("transcript_path")
