@@ -154,6 +154,109 @@ def api_tts_providers():
     return {"providers": out}
 
 
+LAO_REALTIME_INSTRUCTIONS = os.environ.get(
+    "GYAVE_REALTIME_INSTRUCTIONS",
+    """# Role and Objective
+Você é o LAO (Lab Autonomous Officer), agente autônomo de pesquisa e inovação H3 da Blip.
+Responda perguntas sobre tecnologia, inovação, pesquisa e estratégia de produto da Blip.
+
+# Personality and Tone
+Direto, curioso, levemente técnico mas sempre acessível.
+Fale como um colega de time — não como um assistente formal nem como um robô.
+Demonstre entusiasmo genuíno por tecnologia emergente.
+
+# Language
+Padrão: português brasileiro natural e fluente.
+Se o usuário mudar de idioma, acompanhe após uma confirmação breve.
+
+# Reasoning
+Para respostas diretas e confirmações simples, responda rápido sem raciocinar.
+Para perguntas multi-step, análises ou decisões, raciocine brevemente antes de falar.
+Se o áudio estiver pouco claro, peça clarificação — não adivinhe.
+
+# Preambles
+Use preambles curtos somente quando estiver consultando algo ou raciocinando:
+- Prefira: 'Deixa eu verificar...' / 'Vou checar aqui...'
+- Evite: 'Hmm...' / 'Um momento enquanto processo...'
+Para respostas diretas ou confirmações, responda sem preamble.
+
+# Verbosity
+Respostas diretas: 1-2 frases curtas (~5 segundos de fala).
+Se precisar de mais detalhes, pergunte 'Quer que eu aprofunde?' antes de falar muito.
+Troubleshooting: um passo por vez.
+
+# Unclear Audio
+Se o áudio estiver pouco claro, peça para repetir com naturalidade: 'Pode repetir? Não ouvi bem.'
+Não tente adivinhar o que foi dito.""",
+)
+
+
+@app.post("/api/realtime/session")
+async def api_realtime_session(instructions: str | None = None):
+    """Create an OpenAI Realtime API ephemeral client_secret for a WebRTC
+    session. The browser connects directly to OpenAI using this token
+    (browser ↔ OpenAI), so audio never passes through the GYAVE server
+    — low latency, no server-side audio processing.
+
+    Requires OPENAI_API_KEY in the environment.
+    Returns: {client_secret, session_id, voice, model} on success,
+             {error: str} with status 400/503 on failure.
+    """
+    import httpx
+    from fastapi.responses import JSONResponse
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return JSONResponse({"error": "OPENAI_API_KEY não configurada no servidor GYAVE."}, status_code=503)
+
+    session_instructions = instructions or LAO_REALTIME_INSTRUCTIONS
+    voice = os.environ.get("GYAVE_REALTIME_VOICE", "ballad")
+    model = os.environ.get("GYAVE_REALTIME_MODEL", "gpt-4o-realtime-preview")
+
+    payload = {
+        "session": {
+            "type": "realtime",
+            "instructions": session_instructions,
+            "audio": {
+                "input": {
+                    "format": {"type": "audio/pcm", "rate": 24000},
+                    "transcription": {"model": "gpt-realtime-whisper"},
+                    "noise_reduction": None,
+                    "turn_detection": {"type": "semantic_vad", "eagerness": "medium"},
+                },
+                "output": {
+                    "format": {"type": "audio/pcm", "rate": 24000},
+                    "voice": voice,
+                },
+            },
+            "output_modalities": ["audio"],
+            "tools": [],
+            "max_output_tokens": 4096,
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/realtime/client_secrets",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+    except Exception as exc:
+        return JSONResponse({"error": f"Erro ao contatar OpenAI: {exc}"}, status_code=503)
+
+    if resp.status_code != 200:
+        return JSONResponse({"error": f"OpenAI retornou {resp.status_code}: {resp.text[:300]}"}, status_code=resp.status_code)
+
+    data = resp.json()
+    client_secret = (data.get("client_secret") or {}).get("value") or data.get("client_secret")
+    session_id = data.get("id") or data.get("session_id")
+    return {"client_secret": client_secret, "session_id": session_id, "voice": voice, "model": model}
+
+
 @app.post("/api/stt")
 async def api_stt(file: UploadFile = File(...), language: str = Form("pt"), provider: str = Form("local")):
     """Server-side STT — complements the browser-native Web Speech API

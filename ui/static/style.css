@@ -360,6 +360,12 @@ body {
 .fab-menu-btn.muted { background: var(--danger); color: #fff; }
 .fab-menu-btn.muted .icon { background-color: #fff; }
 .fab-menu-btn.history-open { background: var(--blip-blue-pale); color: var(--blip-blue-dark); }
+.fab-menu-btn.active { background: #10b981; color: #fff; animation: pulse-green 1.4s infinite; }
+.fab-menu-btn.active .icon { background-color: #fff; }
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,.4); }
+  50% { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+}
 
 .mic-fab {
   width: 78px;

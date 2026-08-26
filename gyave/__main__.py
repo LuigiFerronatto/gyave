@@ -43,7 +43,34 @@ def _cmd_speak(argv: list[str]) -> int:
 def _cmd_hook(argv: list[str]) -> int:
     hook_kind = argv[0] if argv else "auto"
     payload = read_stdin_json()
-    core.speak_from_hook(hook_kind, payload)
+
+    # Fire-and-forget: resolve the text synchronously (stdin must be read
+    # before we return), then spawn the actual TTS as a detached background
+    # process so this hook exits immediately — well within any CLI timeout
+    # (Gemini's AfterAgent has a 15 s limit; synthesis + playback of a long
+    # reply can easily exceed that if we block).
+    from gyave import adapters
+    from gyave.config import Config
+    cfg = Config.load()
+    text = adapters.resolve_text(hook_kind, payload)
+    if text and not cfg.mute:
+        import os
+        import subprocess
+        import tempfile
+        # Write text to a temp file — avoids shell-escaping issues entirely
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as tf:
+            tf.write(text)
+            tf_path = tf.name
+        # Spawn detached: setsid + close_fds so the child outlives this hook process
+        subprocess.Popen(
+            [sys.executable, "-m", "gyave", "_speak-file", tf_path],
+            start_new_session=True,
+            close_fds=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     # agentStop/Stop hooks: emit no output -> "allow" (don't force another turn)
     print("{}")
     return 0
@@ -264,8 +291,32 @@ def _cmd_codex_exec(argv: list[str]) -> int:
     return proc.returncode
 
 
+def _cmd_speak_file(argv: list[str]) -> int:
+    """Internal: read text from a temp file, speak it, delete the file.
+    Called by _cmd_hook's detached background subprocess — never invoked
+    by users directly (hence the hyphen in the name, which makes it ugly
+    to type on purpose).
+    """
+    import os
+    if not argv:
+        return 1
+    tf_path = argv[0]
+    try:
+        text = Path(tf_path).read_text(encoding="utf-8")
+    except Exception:
+        return 1
+    finally:
+        try:
+            os.unlink(tf_path)
+        except Exception:
+            pass
+    ok, _reason = core.speak_text(text)
+    return 0 if ok else 1
+
+
 COMMANDS = {
     "speak": _cmd_speak,
+    "_speak-file": _cmd_speak_file,
     "hook": _cmd_hook,
     "test": _cmd_test,
     "mute": _cmd_mute,

@@ -139,13 +139,25 @@ def speak_edge(text: str, cfg: Config) -> bool:
 
 
 def speak_openai(text: str, cfg: Config) -> bool:
-    """OpenAI TTS (`tts-1`/`gpt-4o-mini-tts`) — paid, requires
-    `OPENAI_API_KEY`. Added to GYAVE's provider pool after auditing
-    ricardotrevisan/ai-voice-agent, which pairs Whisper STT with OpenAI's
-    LLM; OpenAI TTS is the natural paid-tier neighbor. Opt-in only — never
-    in AUTO_ORDER, since it costs money and needs a credential, unlike the
-    free/no-key `edge` default. Select explicitly via `GYAVE_ENGINE=openai`
-    and set `GYAVE_OPENAI_VOICE` (default "alloy").
+    """OpenAI TTS — paid, requires `OPENAI_API_KEY`. Default model is
+    `gpt-4o-mini-tts` (best quality, supports `instructions` parameter for
+    tone/accent/emotion control). Override with `GYAVE_OPENAI_TTS_MODEL` for
+    `tts-1`/`tts-1-hd`. Opt-in only — never in AUTO_ORDER.
+
+    Env vars:
+      GYAVE_OPENAI_VOICE          — voice name (default: coral; best quality:
+                                    marin or cedar; tts-1 only supports alloy,
+                                    ash, coral, echo, fable, onyx, nova, sage,
+                                    shimmer)
+      GYAVE_OPENAI_TTS_MODEL      — model (default: gpt-4o-mini-tts)
+      GYAVE_OPENAI_TTS_FORMAT     — output format (default: wav for lower
+                                    latency; mp3/opus/pcm/flac also supported)
+      GYAVE_OPENAI_TTS_INSTRUCTIONS — free-form style prompt, e.g.
+                                    'Fale como um colega direto, tom animado'
+                                    (only effective with gpt-4o-mini-tts)
+
+    Uses the same pipelined synthesize-ahead strategy as speak_edge():
+    sentence N+1 is synthesized while sentence N plays.
     """
     try:
         from openai import OpenAI
@@ -155,30 +167,59 @@ def speak_openai(text: str, cfg: Config) -> bool:
     if not os.environ.get("OPENAI_API_KEY"):
         return False
 
-    voice = os.environ.get("GYAVE_OPENAI_VOICE", "alloy")
-    model = os.environ.get("GYAVE_OPENAI_TTS_MODEL", "tts-1")
-    any_played = False
+    import concurrent.futures
+
+    voice = os.environ.get("GYAVE_OPENAI_VOICE", "coral")
+    model = os.environ.get("GYAVE_OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+    fmt = os.environ.get("GYAVE_OPENAI_TTS_FORMAT", "wav")
+    instructions = os.environ.get("GYAVE_OPENAI_TTS_INSTRUCTIONS", "")
+
     try:
         client = OpenAI()
-        for chunk in split_sentences(text):
-            if MUTE_FLAG_FILE.exists():
-                break
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-                out_path = Path(tmp.name)
-            try:
-                with client.audio.speech.with_streaming_response.create(
-                    model=model, voice=voice, input=chunk
-                ) as response:
-                    response.stream_to_file(str(out_path))
-                if out_path.exists() and out_path.stat().st_size > 0:
-                    if _play_file(out_path):
-                        any_played = True
-            except Exception:
-                pass
-            finally:
-                out_path.unlink(missing_ok=True)
     except Exception:
         return False
+
+    def _synthesize_sync(chunk: str) -> Path | None:
+        suffix = f".{fmt}"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            out_path = Path(tmp.name)
+        try:
+            kwargs: dict = dict(model=model, voice=voice, input=chunk,
+                                response_format=fmt)
+            if instructions:
+                kwargs["instructions"] = instructions
+            with client.audio.speech.with_streaming_response.create(
+                **kwargs
+            ) as response:
+                response.stream_to_file(str(out_path))
+            if out_path.exists() and out_path.stat().st_size > 0:
+                return out_path
+        except Exception:
+            pass
+        out_path.unlink(missing_ok=True)
+        return None
+
+    chunks = split_sentences(text)
+    if not chunks:
+        return False
+
+    any_played = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        next_future = pool.submit(_synthesize_sync, chunks[0])
+        for i, _chunk in enumerate(chunks):
+            if MUTE_FLAG_FILE.exists():
+                break
+            out_path = next_future.result()
+            if i + 1 < len(chunks):
+                next_future = pool.submit(_synthesize_sync, chunks[i + 1])
+            if out_path is not None:
+                try:
+                    if _play_file(out_path):
+                        any_played = True
+                except Exception:
+                    pass
+                finally:
+                    out_path.unlink(missing_ok=True)
     return any_played
 
 

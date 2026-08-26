@@ -314,6 +314,10 @@ function stopMediaRecorderCapture() {
 }
 
 micBtn.onclick = () => {
+  if (realtimeActive) {
+    endRealtimeSession();
+    return;
+  }
   const mode = currentSttMode();
   if (mode === "webspeech") {
     if (!recognizer) {
@@ -334,4 +338,120 @@ micBtn.onclick = () => {
   } else {
     startMediaRecorderCapture(mode);
   }
+};
+
+// ── Realtime mode (OpenAI Realtime API via WebRTC) ───────────────────────────
+const realtimeBtn = document.getElementById("realtimeBtn");
+let realtimeActive = false;
+let rtcPc = null;       // RTCPeerConnection
+let rtcAudioEl = null;  // <audio> element for remote playback
+
+async function startRealtimeSession() {
+  if (realtimeActive) return;
+  setMascotState("connecting");
+  addBubble("system", "🎙️ Iniciando sessão Realtime com OpenAI…", false);
+
+  // 1. Request ephemeral token from GYAVE backend
+  let sessionData;
+  try {
+    const resp = await fetch("/api/realtime/session", { method: "POST" });
+    sessionData = await resp.json();
+    if (sessionData.error) throw new Error(sessionData.error);
+  } catch (err) {
+    addBubble("system", `❌ Erro ao criar sessão Realtime: ${err.message}`, false);
+    setMascotState("idle");
+    return;
+  }
+
+  const { client_secret, voice, model } = sessionData;
+
+  // 2. Create RTCPeerConnection
+  rtcPc = new RTCPeerConnection();
+
+  // 3. Remote audio → playback
+  rtcAudioEl = document.createElement("audio");
+  rtcAudioEl.autoplay = true;
+  rtcPc.ontrack = (e) => { rtcAudioEl.srcObject = e.streams[0]; };
+
+  // 4. Local mic → send to OpenAI
+  let localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    addBubble("system", `❌ Microfone não acessível: ${err.message}`, false);
+    setMascotState("idle");
+    rtcPc.close(); rtcPc = null;
+    return;
+  }
+  localStream.getTracks().forEach(t => rtcPc.addTrack(t, localStream));
+
+  // 5. SDP offer → OpenAI
+  const offer = await rtcPc.createOffer();
+  await rtcPc.setLocalDescription(offer);
+
+  let answerSDP;
+  try {
+    const sdpResp = await fetch(
+    `https://api.openai.com/v1/realtime/calls`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${client_secret}`,
+          "Content-Type": "application/sdp",
+        },
+        body: offer.sdp,
+      }
+    );
+  if (!sdpResp.ok) {
+    const errText = await sdpResp.text().catch(() => "");
+    throw new Error(`OpenAI SDP ${sdpResp.status}: ${errText.slice(0, 200)}`);
+  }
+  answerSDP = await sdpResp.text();
+  } catch (err) {
+    addBubble("system", `❌ Falha ao conectar com OpenAI Realtime: ${err.message}`, false);
+    setMascotState("idle");
+    localStream.getTracks().forEach(t => t.stop());
+    rtcPc.close(); rtcPc = null;
+    return;
+  }
+
+  await rtcPc.setRemoteDescription({ type: "answer", sdp: answerSDP });
+
+  realtimeActive = true;
+  realtimeBtn.classList.add("active");
+  micBtn.classList.add("recording");
+  setMicIcon(true);
+  setMascotState("listening");
+  setEngineBadge("openai-realtime", "active");
+  engineBadgeText.textContent = `Realtime (${voice || "ballad"}) — clique no mic para encerrar`;
+  addBubble("system", `✅ Sessão Realtime ativa — voz: ${voice || "ballad"}. Fale! Clique no 🎙️ para encerrar.`, false);
+
+  rtcPc.onconnectionstatechange = () => {
+    if (["disconnected", "failed", "closed"].includes(rtcPc?.connectionState)) {
+      endRealtimeSession(true);
+    } else if (rtcPc?.connectionState === "connected") {
+      setMascotState("listening");
+    }
+  };
+}
+
+function endRealtimeSession(auto = false) {
+  if (!realtimeActive && !rtcPc) return;
+  if (rtcPc) {
+    rtcPc.getSenders().forEach(s => s.track?.stop());
+    rtcPc.close();
+    rtcPc = null;
+  }
+  if (rtcAudioEl) { rtcAudioEl.srcObject = null; rtcAudioEl = null; }
+  realtimeActive = false;
+  realtimeBtn.classList.remove("active");
+  micBtn.classList.remove("recording");
+  setMicIcon(false);
+  setMascotState("idle");
+  if (!auto) addBubble("system", "🔇 Sessão Realtime encerrada.", false);
+}
+
+realtimeBtn.onclick = () => {
+  if (realtimeActive) endRealtimeSession();
+  else startRealtimeSession();
 };
