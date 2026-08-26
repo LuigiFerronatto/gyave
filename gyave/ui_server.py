@@ -252,8 +252,14 @@ async def api_realtime_session(instructions: str | None = None):
         return JSONResponse({"error": f"OpenAI retornou {resp.status_code}: {resp.text[:300]}"}, status_code=resp.status_code)
 
     data = resp.json()
-    client_secret = (data.get("client_secret") or {}).get("value") or data.get("client_secret")
-    session_id = data.get("id") or data.get("session_id")
+    # client_secrets endpoint returns: {"value": "ek_...", "session": {"id": ...}}
+    # sessions endpoint returns: {"client_secret": {"value": "ek_..."}, "id": "sess_..."}
+    client_secret = (
+        data.get("value")                                   # client_secrets format
+        or (data.get("client_secret") or {}).get("value")  # sessions format
+        or data.get("client_secret")                        # fallback string
+    )
+    session_id = (data.get("session") or {}).get("id") or data.get("id") or data.get("session_id")
     return {"client_secret": client_secret, "session_id": session_id, "voice": voice, "model": model}
 
 
