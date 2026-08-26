@@ -209,7 +209,7 @@ class GyaveTUI(App):
                     self.ws = websocket
                     self.connected = True
                     self.status_label.update("🟢 Conectado")
-                    self.logs_log.write("[bold green][WS][/bold yellow] Conectado com sucesso.")
+                    self.logs_log.write("[bold green][WS][/bold green] Conectado com sucesso.")
 
                     while True:
                         raw = await websocket.recv()
@@ -290,7 +290,7 @@ class GyaveTUI(App):
                 self.backend_proc.terminate()
             except Exception:
                 pass
-        await self.action_exit()
+        self.exit()
 
 
 if __name__ == "__main__":

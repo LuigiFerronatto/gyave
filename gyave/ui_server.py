@@ -391,9 +391,12 @@ def _run_invoke(engine: str, prompt: str, cwd: str | None) -> dict:
         cmd = engine_router.build_invoke_command(chosen, prompt)
         import subprocess
         try:
+            import os as _os
+            env = _os.environ.copy()
+            env["GYAVE_MUTE"] = "1"
             result = subprocess.run(
                 cmd, cwd=cwd or DEFAULT_REPO, timeout=300,
-                capture_output=True, text=True,
+                capture_output=True, text=True, env=env
             )
         except subprocess.TimeoutExpired:
             if engine == "auto":
