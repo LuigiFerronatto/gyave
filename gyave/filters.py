@@ -75,6 +75,21 @@ def strip_markdown(text: str) -> str:
     return text
 
 
+def _truncate_at_sentence(text: str, limit: int) -> str:
+    """Cut `text` to at most `limit` chars, backing up to the last
+    sentence-ending punctuation found so the spoken truncation doesn't
+    stop mid-word/mid-thought. Falls back to a hard character cut if no
+    sentence boundary exists in range."""
+    if len(text) <= limit:
+        return text
+    window = text[:limit]
+    for punct in (". ", "! ", "? ", ".\n", "!\n", "?\n"):
+        idx = window.rfind(punct)
+        if idx > limit * 0.5:  # don't cut absurdly short just to land on a boundary
+            return window[: idx + 1]
+    return window
+
+
 def evaluate(raw_text: str, cfg: Config) -> Verdict:
     if not raw_text or not raw_text.strip():
         return Verdict(False, reason="empty")
@@ -82,7 +97,21 @@ def evaluate(raw_text: str, cfg: Config) -> Verdict:
     stripped = raw_text.strip()
 
     if len(stripped) > cfg.max_chars:
-        return Verdict(False, reason=f"too long ({len(stripped)} chars)")
+        # Truncate-and-speak instead of going silent (added 2026-08-26):
+        # a hard skip here means ANY reply that creeps even slightly past
+        # max_chars — e.g. 15794 vs. a 15000 cap — produces total silence
+        # with no feedback, which just moves the "why didn't it talk?"
+        # confusion to a slightly higher threshold instead of fixing it.
+        # Speaking a truncated-but-real opening (up to max_chars, cut at
+        # the last sentence boundary so it doesn't stop mid-word) is
+        # almost always more useful than nothing. Only give up entirely
+        # past `hard_max_chars` (a genuinely huge dump — a full file
+        # listing, a giant diff) where even a truncated read wouldn't be
+        # a a meaningful reply anymore.
+        if len(stripped) > cfg.hard_max_chars:
+            return Verdict(False, reason=f"too long ({len(stripped)} chars, exceeds hard cap)")
+        truncated = _truncate_at_sentence(stripped, cfg.max_chars)
+        stripped = truncated + " ... resposta completa disponível na tela."
 
     if len(_BULLET_LINE_RE.findall(stripped)) >= cfg.max_bullets:
         return Verdict(False, reason="structured list, better read than heard")

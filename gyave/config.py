@@ -72,8 +72,9 @@ class Config:
     rate: str = "+0%"             # edge-tts rate adjustment, e.g. "+15%"
     volume: str = "+0%"           # edge-tts volume adjustment, e.g. "-20%" (from edge-tts README)
     pitch: str = "+0Hz"           # edge-tts pitch adjustment, e.g. "-10Hz" (from edge-tts README)
-    max_chars: int = 15000
-    max_bullets: int = 12
+    max_chars: int = 25000
+    hard_max_chars: int = 40000   # past this, even a truncated read isn't worth it — stay silent
+    max_bullets: int = 99
     max_code_fence_ratio: float = 0.4
     mute: bool = False
     player: str = "auto"          # auto | ffplay | aplay | paplay
@@ -91,6 +92,7 @@ class Config:
             volume=_get("volume", "+0%", j),
             pitch=_get("pitch", "+0Hz", j),
             max_chars=int(_get("max_chars", "15000", j)),
+            hard_max_chars=int(_get("hard_max_chars", "40000", j)),
             max_bullets=int(_get("max_bullets", "12", j)),
             max_code_fence_ratio=float(_get("max_code_fence_ratio", "0.4", j)),
             mute=muted,

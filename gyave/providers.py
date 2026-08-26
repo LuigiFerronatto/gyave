@@ -64,18 +64,28 @@ def speak_edge(text: str, cfg: Config) -> bool:
     Free, no API key, 300+ neural voices — but not offline (network call to
     Microsoft's endpoint) and unofficial/reverse-engineered.
 
-    Speaks sentence-by-sentence (see split_sentences()) rather than
-    synthesizing the whole reply as one blob: shorter time-to-first-audio
-    on long replies, and `gyave mute`/MUTE_FLAG_FILE is re-checked between
-    sentences so a reply can be interrupted mid-playback, not just before
-    it starts. At least one chunk must play successfully for this to
-    report success overall.
+    Speaks sentence-by-sentence (see split_sentences()) with a **pipelined
+    synthesize-ahead** strategy (added 2026-08-26, after raising
+    max_chars/max_bullets to 15000/12 made long replies common enough that
+    the old strictly-sequential "synthesize sentence N, THEN play it, THEN
+    synthesize N+1" loop produced an audible gap before every sentence —
+    each gap is edge-tts's network round-trip time, and a long reply has
+    many sentences, so the gaps added up to a noticeably slow/choppy
+    delivery). Now sentence N+1 is synthesized on a background thread
+    *while* sentence N is still playing, so by the time playback of N
+    finishes, N+1's audio file is usually already sitting on disk ready to
+    play — only the very first sentence pays the full synth-then-play
+    latency. `gyave mute`/MUTE_FLAG_FILE is still re-checked between
+    sentences so a reply can be interrupted mid-playback. At least one
+    chunk must play successfully for this to report success overall.
     """
     try:
         import asyncio
         import edge_tts
     except ImportError:
         return False
+
+    import concurrent.futures
 
     async def _synthesize(chunk: str, out_path: Path) -> bool:
         try:
@@ -89,20 +99,42 @@ def speak_edge(text: str, cfg: Config) -> bool:
         except Exception:
             return False
 
-    any_played = False
-    for chunk in split_sentences(text):
-        if MUTE_FLAG_FILE.exists():
-            break  # interrupted mid-reply
+    def _synthesize_sync(chunk: str) -> Path | None:
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             out_path = Path(tmp.name)
         try:
             if asyncio.run(_synthesize(chunk, out_path)):
-                if _play_file(out_path):
-                    any_played = True
+                return out_path
         except Exception:
             pass
-        finally:
-            out_path.unlink(missing_ok=True)
+        out_path.unlink(missing_ok=True)
+        return None
+
+    chunks = split_sentences(text)
+    if not chunks:
+        return False
+
+    any_played = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        # Kick off synthesis of the first chunk, then loop: while chunk N
+        # plays, chunk N+1's synthesis future is already running.
+        next_future = pool.submit(_synthesize_sync, chunks[0])
+        for i, _chunk in enumerate(chunks):
+            if MUTE_FLAG_FILE.exists():
+                break  # interrupted mid-reply
+            out_path = next_future.result()
+            # Start synthesizing the NEXT sentence immediately, before
+            # blocking on playback of the current one.
+            if i + 1 < len(chunks):
+                next_future = pool.submit(_synthesize_sync, chunks[i + 1])
+            if out_path is not None:
+                try:
+                    if _play_file(out_path):
+                        any_played = True
+                except Exception:
+                    pass
+                finally:
+                    out_path.unlink(missing_ok=True)
     return any_played
 
 
