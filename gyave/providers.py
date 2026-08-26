@@ -272,6 +272,73 @@ def speak_polly(text: str, cfg: Config, play_fn=None) -> bool:
     return any_played
 
 
+def speak_elevenlabs(text: str, cfg: Config, play_fn=None) -> bool:
+    """ElevenLabs TTS — paid, requires `ELEVENLABS_API_KEY`."""
+    try:
+        from elevenlabs.client import ElevenLabs
+    except ImportError:
+        return False
+    import os
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
+    if not api_key:
+        return False
+
+    import concurrent.futures
+
+    voice = os.environ.get("GYAVE_ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")
+    model = os.environ.get("GYAVE_ELEVENLABS_MODEL", "eleven_multilingual_v2")
+
+    try:
+        client = ElevenLabs(api_key=api_key)
+    except Exception:
+        return False
+
+    def _synthesize_sync(chunk: str) -> Path | None:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            out_path = Path(tmp.name)
+        try:
+            response = client.text_to_speech.convert(
+                voice_id=voice,
+                text=chunk,
+                model_id=model,
+                output_format="mp3_44100_128",
+            )
+            with out_path.open("wb") as f:
+                for b_chunk in response:
+                    if b_chunk:
+                        f.write(b_chunk)
+            if out_path.exists() and out_path.stat().st_size > 0:
+                return out_path
+        except Exception:
+            pass
+        out_path.unlink(missing_ok=True)
+        return None
+
+    chunks = split_sentences(text)
+    if not chunks:
+        return False
+
+    any_played = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        next_future = pool.submit(_synthesize_sync, chunks[0])
+        for i, _chunk in enumerate(chunks):
+            if MUTE_FLAG_FILE.exists():
+                break
+            out_path = next_future.result()
+            if i + 1 < len(chunks):
+                next_future = pool.submit(_synthesize_sync, chunks[i + 1])
+            if out_path is not None:
+                try:
+                    actual_play = play_fn or _play_file
+                    if actual_play(out_path):
+                        any_played = True
+                except Exception:
+                    pass
+                finally:
+                    out_path.unlink(missing_ok=True)
+    return any_played
+
+
 def speak_espeak(text: str, cfg: Config, play_fn=None) -> bool:
     """Fully offline, robotic fallback via espeak-ng or spd-say."""
     if shutil.which("espeak-ng"):
@@ -399,11 +466,41 @@ def list_espeak_voices() -> list[dict]:
     ]
 
 
+def list_elevenlabs_voices(locale_prefix: str | None = None) -> list[dict]:
+    """List real available ElevenLabs voices via the SDK. Fails open to a
+    static fallback of pre-made voices.
+    """
+    fallback = [
+        {"short_name": "JBFqnCBsd6RMkjVDRZzb", "gender": "Male", "locale": "en-US", "friendly_name": "George (ElevenLabs)"},
+        {"short_name": "pNInz6obpgDQGcFmaJgB", "gender": "Male", "locale": "en-US", "friendly_name": "Adam (ElevenLabs)"},
+    ]
+    try:
+        from elevenlabs.client import ElevenLabs
+        import os
+        api_key = os.environ.get("ELEVENLABS_API_KEY")
+        if not api_key:
+            return fallback
+        client = ElevenLabs(api_key=api_key)
+        resp = client.voices.get_all()
+        out = []
+        for v in getattr(resp, "voices", []):
+            out.append({
+                "short_name": v.voice_id,
+                "gender": (v.labels or {}).get("gender", v.category or "").capitalize(),
+                "locale": (v.labels or {}).get("accent", ""),
+                "friendly_name": f"{v.name} (ElevenLabs)",
+            })
+        return out or fallback
+    except Exception:
+        return fallback
+
+
 PROVIDERS = {
     "edge": speak_edge,
     "espeak": speak_espeak,
     "openai": speak_openai,
     "polly": speak_polly,
+    "elevenlabs": speak_elevenlabs,
     "silent": speak_silent,
 }
 

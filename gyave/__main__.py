@@ -244,7 +244,14 @@ def _cmd_doctor(_argv: list[str]) -> int:
 
     import os
     check("OPENAI_API_KEY definido (opcional)", bool(os.environ.get("OPENAI_API_KEY")))
+    check("ELEVENLABS_API_KEY definido (opcional)", bool(os.environ.get("ELEVENLABS_API_KEY")))
     check("AWS creds configuradas (opcional)", bool(os.environ.get("AWS_ACCESS_KEY_ID") or Path.home().joinpath(".aws/credentials").exists()))
+
+    try:
+        import elevenlabs  # noqa: F401
+        check("elevenlabs instalado (opcional)", True)
+    except ImportError:
+        check("elevenlabs instalado (opcional)", False, "pip install elevenlabs")
 
     cfg = Config.load()
     check(f"config carregada (engine={cfg.engine}, voice={cfg.voice})", True)

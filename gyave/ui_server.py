@@ -90,7 +90,7 @@ def api_voices(provider: str = "edge"):
     vs. espeak's bare language codes), so the picker must refresh whenever
     the provider changes instead of always showing the fixed edge-tts list.
     """
-    from gyave.providers import list_edge_voices, list_openai_voices, list_polly_voices, list_espeak_voices
+    from gyave.providers import list_edge_voices, list_openai_voices, list_polly_voices, list_espeak_voices, list_elevenlabs_voices
 
     if provider == "edge":
         voices = list_edge_voices("pt-") + list_edge_voices("en-")
@@ -107,6 +107,8 @@ def api_voices(provider: str = "edge"):
         voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_polly_voices()]
     elif provider == "espeak":
         voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_espeak_voices()]
+    elif provider == "elevenlabs":
+        voices = [{"id": v["short_name"], "label": v["friendly_name"]} for v in list_elevenlabs_voices()]
     else:  # silent — no real voice concept
         voices = [{"id": "silent", "label": "N/A (modo silencioso)"}]
 
@@ -138,12 +140,19 @@ def api_tts_providers():
             except ImportError:
                 return False
             return bool(_os.environ.get("AWS_ACCESS_KEY_ID")) or Path.home().joinpath(".aws/credentials").exists()
+        if name == "elevenlabs":
+            try:
+                import elevenlabs  # noqa: F401
+            except ImportError:
+                return False
+            return bool(_os.environ.get("ELEVENLABS_API_KEY"))
         return True
 
     labels = {
         "edge": "Microsoft Edge (gratuito, neural)",
         "openai": "OpenAI TTS (pago)",
         "polly": "AWS Polly (pago)",
+        "elevenlabs": "ElevenLabs (pago, streaming)",
         "espeak": "eSpeak (offline, robótico)",
         "silent": "Silencioso (log apenas)",
     }
@@ -316,27 +325,50 @@ def _run_invoke(engine: str, prompt: str, cwd: str | None) -> dict:
         return {"ok": False, "text": f"engine_router indisponível: {_IMPORT_ERROR}"}
     resolved_engine = engine if engine != "auto" else None
     priority = ["copilot", "claude", "gemini"]
-    try:
-        chosen = engine_router.pick_engine(resolved_engine, priority)
-    except Exception:
-        chosen = resolved_engine or "claude"
-    binary = engine_router.binary_for(chosen)
-    import shutil
-    if not shutil.which(binary):
-        return {"ok": False, "text": f"CLI {binary!r} não encontrado no PATH."}
-    cmd = engine_router.build_invoke_command(chosen, prompt)
-    import subprocess
-    try:
-        result = subprocess.run(
-            cmd, cwd=cwd or DEFAULT_REPO, timeout=300,
-            capture_output=True, text=True,
-        )
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "text": "Tempo esgotado esperando a resposta do CLI."}
-    if result.returncode != 0:
-        stderr = (result.stderr or "")[:400]
-        return {"ok": False, "text": f"Erro ({chosen}): {stderr or 'sem detalhes'}"}
-    return {"ok": True, "text": result.stdout.strip(), "engine": chosen}
+
+    tried = set()
+    while True:
+        try:
+            chosen = engine_router.pick_engine(resolved_engine, priority)
+        except Exception:
+            chosen = resolved_engine or "claude"
+
+        if chosen in tried:
+            # We already tried this engine in this call, avoid infinite loop
+            break
+        tried.add(chosen)
+
+        binary = engine_router.binary_for(chosen)
+        import shutil
+        if not shutil.which(binary):
+            if engine == "auto":
+                engine_router.record_failure(chosen, f"CLI binary '{binary}' not found on PATH")
+                continue
+            return {"ok": False, "text": f"CLI {binary!r} não encontrado no PATH."}
+
+        cmd = engine_router.build_invoke_command(chosen, prompt)
+        import subprocess
+        try:
+            result = subprocess.run(
+                cmd, cwd=cwd or DEFAULT_REPO, timeout=300,
+                capture_output=True, text=True,
+            )
+        except subprocess.TimeoutExpired:
+            if engine == "auto":
+                engine_router.record_failure(chosen, "Timeout expired")
+                continue
+            return {"ok": False, "text": "Tempo esgotado esperando a resposta do CLI."}
+
+        if result.returncode != 0:
+            stderr = result.stderr or ""
+            if engine == "auto":
+                engine_router.record_failure(chosen, stderr)
+                continue
+            return {"ok": False, "text": f"Erro ({chosen}): {stderr[:400] or 'sem detalhes'}"}
+
+        return {"ok": True, "text": result.stdout.strip(), "engine": chosen}
+
+    return {"ok": False, "text": "Todos os mecanismos de CLI disponíveis falharam (erros de quota ou indisponibilidade)."}
 
 
 @app.websocket("/ws")

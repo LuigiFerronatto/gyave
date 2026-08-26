@@ -21,7 +21,7 @@ _MD_BOLD_ITALIC_RE = re.compile(r"(\*{1,3}|_{1,3})(.+?)\1")
 _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _URL_RE = re.compile(r"https?://\S+")
 _TOOL_OUTPUT_HINTS = re.compile(
-    r"(^\s*\$\s|^\s*[{\[]|^\s*[+-]{1,2}\s|Traceback \(most recent|"
+    r"(^\s*\$\s|^\s*[{\[]|^\s*[-+]{3,}\s|^\s*@@\s+-\d+|Traceback \(most recent|"
     r"^\s*[\w./-]+:\d+:|exit code \d+)",
     re.MULTILINE,
 )
