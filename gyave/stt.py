@@ -129,3 +129,37 @@ def is_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def transcribe_fishaudio(audio_bytes: bytes, suffix: str = ".webm", language: str = "pt") -> Optional[str]:
+    """Cloud STT via Fish Audio's ASR API. Requires `FISH_API_KEY`."""
+    import requests
+    api_key = os.environ.get("FISH_API_KEY")
+    if not api_key:
+        return None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = Path(tmp.name)
+        try:
+            lang = language[:2] if language else "pt"
+            with open(tmp_path, "rb") as fh:
+                resp = requests.post(
+                    "https://api.fish.audio/v1/asr",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    data={"language": lang, "ignore_timestamps": "true"},
+                    files={"audio": (f"audio{suffix}", fh)},
+                    timeout=60
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                return (data.get("text") or "").strip() or None
+            return None
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    except Exception:
+        return None
+
+
+def fishaudio_available() -> bool:
+    return bool(os.environ.get("FISH_API_KEY"))

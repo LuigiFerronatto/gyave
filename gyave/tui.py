@@ -18,6 +18,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, Input, Select, Label, RichLog, Static
 from textual.message import Message
+from rich.markup import escape
 
 from gyave.config import Config
 
@@ -171,7 +172,7 @@ class GyaveTUI(App):
                 if providers:
                     provider_sel.value = "edge"
         except Exception as exc:
-            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao carregar provedores: {exc}")
+            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao carregar provedores: {escape(str(exc))}")
 
     async def load_voices_and_models(self, provider: str) -> None:
         try:
@@ -194,7 +195,7 @@ class GyaveTUI(App):
                 if models:
                     model_sel.value = models[0][1]
         except Exception as exc:
-            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao carregar vozes/modelos para {provider}: {exc}")
+            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao carregar vozes/modelos para {provider}: {escape(str(exc))}")
 
     async def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "provider_select" and event.value:
@@ -220,19 +221,19 @@ class GyaveTUI(App):
                             self.status_label.update(f"🟢 Conectado ({val})")
                         elif msg_type == "assistant_message":
                             text = msg.get("text", "")
-                            self.chat_log.write(f"[bold purple]🤖 Lao:[/bold purple] {text}")
+                            self.chat_log.write(f"[bold purple]🤖 Lao:[/bold purple] {escape(text)}")
                             self.logs_log.write(f"[bold purple][LAO][/bold purple] Mensagem recebida.")
                         elif msg_type == "user_echo":
                             # already printed locally, ignore
                             pass
                         elif msg_type == "tts_skipped":
                             text = msg.get("text", "")
-                            self.chat_log.write(f"[bold yellow]🔇 Sistema:[/bold yellow] {text}")
+                            self.chat_log.write(f"[bold yellow]🔇 Sistema:[/bold yellow] {escape(text)}")
             except Exception as exc:
                 self.connected = False
                 self.ws = None
                 self.status_label.update("🔴 Desconectado")
-                self.logs_log.write(f"[bold red][WS][/bold red] Erro ou desconexão: {exc}. Reconectando em 3s...")
+                self.logs_log.write(f"[bold red][WS][/bold red] Erro ou desconexão: {escape(str(exc))}. Reconectando em 3s...")
                 await asyncio.sleep(3.0)
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -242,7 +243,7 @@ class GyaveTUI(App):
                 return
 
             event.input.value = ""
-            self.chat_log.write(f"[bold cyan]👤 Você:[/bold cyan] {text}")
+            self.chat_log.write(f"[bold cyan]👤 Você:[/bold cyan] {escape(text)}")
 
             if not self.connected or not self.ws:
                 self.chat_log.write("[bold red]❌ Erro:[/bold red] Desconectado do servidor.")
@@ -267,7 +268,7 @@ class GyaveTUI(App):
             try:
                 await self.ws.send(json.dumps(payload))
             except Exception as exc:
-                self.chat_log.write(f"[bold red]❌ Erro ao enviar:[/bold red] {exc}")
+                self.chat_log.write(f"[bold red]❌ Erro ao enviar:[/bold red] {escape(str(exc))}")
 
     def action_toggle_mute(self) -> None:
         self.muted = not self.muted
@@ -280,7 +281,7 @@ class GyaveTUI(App):
             subprocess.run([sys.executable, "-m", "gyave", "stop"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.logs_log.write("[bold yellow][TUI][/bold yellow] Comando STOP enviado.")
         except Exception as exc:
-            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao enviar STOP: {exc}")
+            self.logs_log.write(f"[bold red][ERRO][/bold red] Falha ao enviar STOP: {escape(str(exc))}")
 
     async def action_quit(self) -> None:
         # Kill the backend if we started it

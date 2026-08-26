@@ -332,6 +332,9 @@ async def api_stt(file: UploadFile = File(...), language: str = Form("pt"), prov
     if provider == "openai":
         text = stt.transcribe_openai(audio_bytes, suffix=suffix, language=language)
         err = None if text else "OpenAI Whisper indisponível (defina OPENAI_API_KEY) ou áudio não reconhecido"
+    elif provider == "fishaudio":
+        text = stt.transcribe_fishaudio(audio_bytes, suffix=suffix, language=language)
+        err = None if text else "Fish Audio STT indisponível (defina FISH_API_KEY) ou áudio não reconhecido"
     else:
         text = stt.transcribe_bytes(audio_bytes, suffix=suffix, language=language)
         err = None if text else "Whisper local indisponível (pip install faster-whisper) ou áudio não reconhecido"
@@ -354,6 +357,7 @@ def api_health():
         ),
         "whisper_stt_available": stt.is_available(),
         "openai_stt_available": stt.openai_available(),
+        "fishaudio_stt_available": stt.fishaudio_available(),
     }
 
 
