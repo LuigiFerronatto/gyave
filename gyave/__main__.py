@@ -9,6 +9,7 @@ Usage:
   gyave test                            # play a short confirmation phrase
   gyave mute / gyave unmute              # toggle the session-wide mute flag
   gyave stop                             # stop active audio playback immediately
+  gyave kill                             # kill all background Gyave servers, TUIs, and players
   gyave ui [--port=8765] [--no-browser]  # launch the Voice Console (web UI)
   gyave tui                              # launch the premium Terminal User Interface (TUI)
   gyave status                           # show current engine/voice/rate/mute
@@ -113,6 +114,24 @@ def _cmd_stop(_argv: list[str]) -> int:
         except Exception:
             pass
     print("✅ Reprodução de áudio interrompida.")
+    return 0
+
+
+def _cmd_kill(_argv: list[str]) -> int:
+    import subprocess
+    # Kill background UI servers, TUI clients, and long-running daemons
+    for target in ["gyave ui", "gyave tui", "gyave _speak-file"]:
+        try:
+            subprocess.run(["pkill", "-f", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    # Kill any active audio players
+    for player in ["ffplay", "paplay", "aplay", "afplay"]:
+        try:
+            subprocess.run(["pkill", "-x", player], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+    print("✅ Todos os processos e servidores do GYAVE foram finalizados.")
     return 0
 
 
@@ -428,6 +447,7 @@ COMMANDS = {
     "mute": _cmd_mute,
     "unmute": _cmd_unmute,
     "stop": _cmd_stop,
+    "kill": _cmd_kill,
     "ui": _cmd_ui,
     "tui": _cmd_tui,
     "status": _cmd_status,

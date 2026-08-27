@@ -232,6 +232,7 @@ gyave volume -10%
 gyave pitch +5Hz
 gyave mute / unmute       # toggle global mute (persists)
 gyave stop                # stop active audio playback immediately without muting
+gyave kill                # forcefully terminate all background Gyave servers, TUIs, and players
 gyave ui                  # launch the Voice Console Web UI
 gyave tui                 # launch the beautiful, interactive Terminal User Interface (TUI)
 gyave doctor              # diagnose a broken install (deps, player, creds)
