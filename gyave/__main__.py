@@ -119,19 +119,39 @@ def _cmd_stop(_argv: list[str]) -> int:
 
 def _cmd_kill(_argv: list[str]) -> int:
     import subprocess
-    # Kill background UI servers, TUI clients, and long-running daemons
+    import os
+    killed_count = 0
+
+    # 1. Kill background UI servers, TUI clients, and long-running daemons
     for target in ["gyave ui", "gyave tui", "gyave _speak-file"]:
         try:
-            subprocess.run(["pkill", "-f", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Get matching PIDs to count them
+            proc = subprocess.run(["pgrep", "-f", target], capture_output=True, text=True)
+            pids = [p.strip() for p in proc.stdout.splitlines() if p.strip()]
+            if pids:
+                current_pid = str(os.getpid())
+                pids = [p for p in pids if p != current_pid]
+                if pids:
+                    subprocess.run(["pkill", "-f", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    killed_count += len(pids)
         except Exception:
             pass
-    # Kill any active audio players
+
+    # 2. Kill any active audio players
     for player in ["ffplay", "paplay", "aplay", "afplay"]:
         try:
-            subprocess.run(["pkill", "-x", player], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            proc = subprocess.run(["pgrep", "-x", player], capture_output=True, text=True)
+            pids = [p.strip() for p in proc.stdout.splitlines() if p.strip()]
+            if pids:
+                subprocess.run(["pkill", "-x", player], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                killed_count += len(pids)
         except Exception:
             pass
-    print("✅ Todos os processos e servidores do GYAVE foram finalizados.")
+
+    if killed_count > 0:
+        print(f"✅ Todos os processos do GYAVE foram finalizados ({killed_count} processos encerrados).")
+    else:
+        print("✅ Nenhum processo ativo do GYAVE estava rodando.")
     return 0
 
 
